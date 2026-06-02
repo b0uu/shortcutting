@@ -1,0 +1,26 @@
+node_modules/
+.next/
+out/
+coverage/
+playwright-report/
+test-results/
+
+.env
+.env.local
+.env.*.local
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+tsconfig.tsbuildinfo
+
+# Local AI/agent workflow files
+AGENTS.md
+docs/codex-workflow.md
+docs/goal-mode-prompt.md
+docs/implementation-guidance.md
+docs/plan-mode-prompt.md
+docs/testing-and-review.md
+extra-agent-files/
