@@ -23,6 +23,7 @@ export function HistoryPanel({ open, logger, onClose }: HistoryPanelProps) {
   const [personalBests, setPersonalBests] = useState<TestResult[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sharePreviewVisible, setSharePreviewVisible] = useState(false);
+  const [clearArmed, setClearArmed] = useState(false);
   const selected = useMemo(() => results.find((result) => result.id === selectedId) ?? results[0] ?? null, [results, selectedId]);
 
   useEffect(() => {
@@ -60,12 +61,16 @@ export function HistoryPanel({ open, logger, onClose }: HistoryPanelProps) {
   if (!open) return null;
 
   async function clearHistory() {
-    if (!window.confirm("Clear local history and personal bests?")) return;
+    if (!clearArmed) {
+      setClearArmed(true);
+      return;
+    }
     await logger.clearLocalResults();
     setResults([]);
     setPersonalBests([]);
     setSelectedId(null);
     setPersonalBestCount(0);
+    setClearArmed(false);
   }
 
   return (
@@ -93,14 +98,14 @@ export function HistoryPanel({ open, logger, onClose }: HistoryPanelProps) {
           <button type="button" className="btn-ghost" onClick={onClose}>close</button>
         </div>
         <div className="history-filters" aria-label="history filters">
-          <FilterButton active={mode === "all"} onClick={() => setMode("all")}>all modes</FilterButton>
-          <FilterButton active={mode === "target-match"} onClick={() => setMode("target-match")}>target</FilterButton>
-          <FilterButton active={mode === "drill"} onClick={() => setMode("drill")}>drill</FilterButton>
-          <FilterButton active={mode === "coding"} onClick={() => setMode("coding")}>coding</FilterButton>
-          <FilterButton active={difficulty === "all"} onClick={() => setDifficulty("all")}>all difficulties</FilterButton>
-          <FilterButton active={difficulty === "standard"} onClick={() => setDifficulty("standard")}>standard</FilterButton>
-          <FilterButton active={difficulty === "advanced"} onClick={() => setDifficulty("advanced")}>advanced</FilterButton>
-          <FilterButton active={difficulty === "multiline"} onClick={() => setDifficulty("multiline")}>multi-line</FilterButton>
+          <FilterButton active={mode === "all"} onClick={() => { setClearArmed(false); setMode("all"); }}>all modes</FilterButton>
+          <FilterButton active={mode === "target-match"} onClick={() => { setClearArmed(false); setMode("target-match"); }}>target</FilterButton>
+          <FilterButton active={mode === "drill"} onClick={() => { setClearArmed(false); setMode("drill"); }}>drill</FilterButton>
+          <FilterButton active={mode === "coding"} onClick={() => { setClearArmed(false); setMode("coding"); }}>coding</FilterButton>
+          <FilterButton active={difficulty === "all"} onClick={() => { setClearArmed(false); setDifficulty("all"); }}>all difficulties</FilterButton>
+          <FilterButton active={difficulty === "standard"} onClick={() => { setClearArmed(false); setDifficulty("standard"); }}>standard</FilterButton>
+          <FilterButton active={difficulty === "advanced"} onClick={() => { setClearArmed(false); setDifficulty("advanced"); }}>advanced</FilterButton>
+          <FilterButton active={difficulty === "multiline"} onClick={() => { setClearArmed(false); setDifficulty("multiline"); }}>multi-line</FilterButton>
         </div>
         <p className="history-meta">{results.length} recent runs: {personalBestCount} personal bests</p>
         <div className="history-bests" aria-label="personal bests">
@@ -159,7 +164,9 @@ export function HistoryPanel({ open, logger, onClose }: HistoryPanelProps) {
             )}
           </div>
         </div>
-        <button type="button" className="btn-ghost danger-action" onClick={clearHistory}>clear history</button>
+        <button type="button" className="btn-ghost danger-action" onClick={clearHistory}>
+          {clearArmed ? "confirm clear history" : "clear history"}
+        </button>
       </motion.div>
     </motion.div>
   );

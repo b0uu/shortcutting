@@ -16,6 +16,9 @@ describe("drills", () => {
     ]);
     expect(hintForDrill(drills[0], "mac")).toContain("Option");
     expect(hintForDrill(drills[0], "windows-linux")).toContain("Ctrl");
+    expect(drills.every((challenge) => challenge.intendedShortcutPath.length > 0)).toBe(true);
+    expect(drills.every((challenge) => challenge.attentionRanges.length > 0)).toBe(true);
+    expect(drills.every((challenge) => challenge.skillPacks.length > 0)).toBe(true);
   });
 
   it("keeps drill order deterministic by seed", () => {

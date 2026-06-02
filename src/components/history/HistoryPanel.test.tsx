@@ -57,7 +57,7 @@ const baseResult: TestResult = {
 };
 
 describe("HistoryPanel", () => {
-  it("renders local history, filters runs, and clears with confirmation", async () => {
+  it("renders local history, filters runs, and clears with in-app confirmation", async () => {
     window.localStorage.clear();
     const logger = new LocalResultLogger();
     await logger.saveResult(baseResult);
@@ -67,7 +67,7 @@ describe("HistoryPanel", () => {
       config: { ...baseResult.config, mode: "drill" },
     });
 
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const confirmSpy = vi.spyOn(window, "confirm").mockImplementation(() => false);
     render(<HistoryPanel open logger={logger} onClose={() => {}} />);
 
     await screen.findByText(/2 recent runs/i);
@@ -80,7 +80,12 @@ describe("HistoryPanel", () => {
     await waitFor(() => expect(screen.getByText(/1 recent runs/i)).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: "clear history" }));
+    expect(screen.getByRole("button", { name: "confirm clear history" })).toBeInTheDocument();
+    expect(confirmSpy).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "confirm clear history" }));
     await waitFor(() => expect(screen.getByText(/no local runs yet/i)).toBeInTheDocument());
     expect(await logger.getResults()).toEqual([]);
+    expect(confirmSpy).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
   });
 });

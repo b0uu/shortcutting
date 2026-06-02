@@ -13,7 +13,24 @@ describe("generateTargetChallenges", () => {
     expect(challenge.errors.length).toBeGreaterThan(0);
     expect(challenge.errors[0].skillTags.length).toBeGreaterThan(0);
     expect(challenge.skillPacks.length).toBeGreaterThan(0);
+    expect(challenge.intendedShortcutPath.length).toBeGreaterThan(0);
+    expect(challenge.attentionRanges.length).toBeGreaterThan(0);
     expect(challenge.difficulty).toBe("standard");
+  });
+
+  it("generates target attention ranges that point inside the displayed target", () => {
+    const generated = generateTargetChallenges(5, "standard-v1");
+
+    for (const challenge of generated) {
+      expect(challenge.intendedShortcutPath.length).toBeGreaterThan(0);
+      expect(challenge.attentionRanges.length).toBeGreaterThan(0);
+      for (const range of challenge.attentionRanges) {
+        expect(range.start).toBeGreaterThanOrEqual(0);
+        expect(range.end).toBeGreaterThan(range.start);
+        expect(range.end).toBeLessThanOrEqual(challenge.targetText.length);
+        expect(challenge.targetText.slice(range.start, range.end).trim().length).toBeGreaterThan(0);
+      }
+    }
   });
 
   it("filters deterministic pools by difficulty and skill pack", () => {

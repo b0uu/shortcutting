@@ -9,6 +9,8 @@ describe("generatePythonChallenges", () => {
     expect(second).toEqual(first);
     expect(first.every((challenge) => challenge.mode === "coding")).toBe(true);
     expect(first.every((challenge) => challenge.prompt.includes("Python"))).toBe(true);
+    expect(first.every((challenge) => challenge.intendedShortcutPath.length > 0)).toBe(true);
+    expect(first.every((challenge) => challenge.attentionRanges.length > 0)).toBe(true);
   });
 
   it("filters Python templates by difficulty and preserves indentation/newlines", () => {
@@ -17,6 +19,7 @@ describe("generatePythonChallenges", () => {
     expect(filterPythonTemplates("multiline").length).toBeGreaterThan(0);
     expect(multiline[0].targetText).toContain("\n");
     expect(multiline[0].difficulty).toBe("multiline");
+    expect(multiline[0].attentionRanges.every((range) => range.end <= multiline[0].targetText.length)).toBe(true);
   });
 
   it("labels Python templates with coding-specific skill packs", () => {

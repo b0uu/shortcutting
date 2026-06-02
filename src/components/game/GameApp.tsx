@@ -1,7 +1,7 @@
 "use client";
 
 import { MotionConfig } from "framer-motion";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { generateTargetChallenges, seedPack } from "@/domain/challenges";
 import { generatePythonChallenges } from "@/domain/coding";
 import { generateDrillChallenges } from "@/domain/drills";
@@ -93,7 +93,6 @@ export function GameApp() {
   const [flowMatched, setFlowMatched] = useState(false);
   const [completedPulseIndex, setCompletedPulseIndex] = useState<number | null>(null);
   const [partTransition, setPartTransition] = useState<{ completedIndex: number; activeIndex: number } | null>(null);
-  const [completionRailHeight, setCompletionRailHeight] = useState(28);
   const [editorResetKey, setEditorResetKey] = useState(0);
   const [screenFading, setScreenFading] = useState(false);
   const screenFadeTimeout = useRef<number | null>(null);
@@ -106,6 +105,7 @@ export function GameApp() {
   const hintTimeout = useRef<number | null>(null);
   const completionFlashTimeout = useRef<number | null>(null);
   const lockedStackInnerRef = useRef<HTMLDivElement | null>(null);
+  const editorFlowRef = useRef<HTMLDivElement | null>(null);
   const completing = useRef(false);
   const latestText = useRef(challenges[0].editableText);
   const latestSelection = useRef(selection);
@@ -163,10 +163,14 @@ export function GameApp() {
   });
 
   useLayoutEffect(() => {
-    if (!flowMatched || !lockedStackInnerRef.current) return;
+    if (!flowMatched || !lockedStackInnerRef.current || !editorFlowRef.current) return;
+    if (config.mode === "drill") {
+      editorFlowRef.current.style.setProperty("--completion-rail-height", "40px");
+      return;
+    }
     const visibleHistoryHeight = Math.min(64, lockedStackInnerRef.current.getBoundingClientRect().height);
-    setCompletionRailHeight(Math.max(28, Math.round(visibleHistoryHeight) + 28));
-  }, [flowMatched, segments]);
+    editorFlowRef.current.style.setProperty("--completion-rail-height", `${Math.max(28, Math.round(visibleHistoryHeight) + 28)}px`);
+  }, [config.mode, flowMatched, segments]);
 
   useEffect(() => {
     if (runStartTime === null || phase === "complete") return;
@@ -249,7 +253,7 @@ export function GameApp() {
     setFlowMatched(false);
     setCompletedPulseIndex(null);
     setPartTransition(null);
-    setCompletionRailHeight(28);
+    editorFlowRef.current?.style.setProperty("--completion-rail-height", "28px");
     setEditorResetKey((key) => key + 1);
     runStartedAtIso.current = null;
     challengeResults.current = [];
@@ -259,7 +263,6 @@ export function GameApp() {
   }, []);
 
   function updateConfig(patch: Partial<TestConfig>) {
-    if (midChallenge && !window.confirm("Leave this run and apply the new option?")) return;
     const detected = detectPlatform(navigator.userAgent, navigator.platform);
     const nextPreference = patch.platformPreference ?? config.platformPreference;
     const nextConfig = {
@@ -277,7 +280,6 @@ export function GameApp() {
   }
 
   function goHome() {
-    if (midChallenge && !window.confirm("Leave this run and return home?")) return;
     closeSettings();
     closeHistory();
     closeShortcutMap();
@@ -285,7 +287,6 @@ export function GameApp() {
   }
 
   function giveUp() {
-    if (midChallenge && !window.confirm("Give up this run and try again?")) return;
     resetPreview(config);
   }
 
@@ -541,7 +542,6 @@ export function GameApp() {
   }
 
   async function resetLocalData() {
-    if (!window.confirm("Reset local history and personal bests?")) return;
     await logger.clearLocalResults();
   }
 
@@ -571,10 +571,9 @@ export function GameApp() {
   const showCompletedSegments = config.mode !== "coding";
   const hasCompletedSegments = showCompletedSegments && segments.some((segment) => segment.status === "complete");
   const drillResetVisible = config.mode === "drill" && phase === "active";
-  const editorFlowStyle = {
-    "--completion-rail-height": `${completionRailHeight}px`,
+  const activeSegmentStyle = {
+    "--active-rail-height": `${activeRailHeightFor(config.mode, currentText)}px`,
   } as CSSProperties;
-
   return (
     <MotionConfig reducedMotion={config.reducedMotion ? "always" : "user"}>
     <div className="app-shell" data-theme={config.theme} style={activeThemeStyle}>
@@ -617,12 +616,14 @@ export function GameApp() {
                 className={`target-block ${partTransition ? "target-switched" : ""}`}
                 id="target-text"
               >
-                {challenge.mode === "drill" ? challenge.prompt : challenge.targetText}
+                {challenge.mode === "drill"
+                  ? challenge.prompt
+                  : renderAttentionText(challenge.targetText, challenge.attentionRanges, challenge.editableText)}
               </div>
             </div>
             <div className={`editor-zone ${hasCompletedSegments ? "has-history" : ""} ${drillResetVisible ? "has-reset" : ""}`}>
               <div className="block-label edit-label">your edit</div>
-              <div className={`editor-flow ${flowMatched ? "matched" : ""} ${drillResetVisible ? "has-reset" : ""}`} data-testid="editor-flow" style={editorFlowStyle}>
+              <div className={`editor-flow ${flowMatched ? "matched" : ""} ${drillResetVisible ? "has-reset" : ""}`} data-testid="editor-flow" ref={editorFlowRef}>
                 <div className="locked-stack" aria-label="Completed edit history">
                   <div className="locked-stack-inner" ref={lockedStackInnerRef}>
                     {showCompletedSegments && segments.map((segment, index) => (
@@ -639,7 +640,7 @@ export function GameApp() {
                   </div>
                 </div>
                 {phase !== "complete" && (
-                  <div className={`active-segment ${partTransition?.activeIndex === challengeIndex ? "revealed" : ""} ${showHint ? "hinting" : ""}`} data-testid="active-segment">
+                  <div className={`active-segment ${partTransition?.activeIndex === challengeIndex ? "revealed" : ""} ${showHint ? "hinting" : ""}`} data-testid="active-segment" style={activeSegmentStyle}>
                     <EditableSurface
                       challenge={challenge}
                       active={active}
@@ -713,6 +714,96 @@ export function GameApp() {
     </div>
     </MotionConfig>
   );
+}
+
+function renderAttentionText(text: string, ranges: Challenge["attentionRanges"], sourceText?: string): ReactNode {
+  if (ranges.length === 0) return text;
+  const orderedRanges = ranges
+    .filter((range) => range.start >= 0 && range.end > range.start && range.end <= text.length)
+    .sort((first, second) => first.start - second.start);
+  const nodes: ReactNode[] = [];
+  const highlighted = new Map<number, string>();
+  const changedTargetIndexes = sourceText === undefined ? undefined : changedCharacterIndexes(sourceText, text);
+
+  orderedRanges.forEach((range) => {
+    let rangeMarked = false;
+    for (let cursor = range.start; cursor < range.end; cursor += 1) {
+      const character = text[cursor];
+      const shouldMark = sourceText === undefined
+        ? !/\s/.test(character)
+        : changedTargetIndexes?.has(cursor) && !/\s/.test(character);
+      if (shouldMark) {
+        highlighted.set(cursor, range.reason);
+        rangeMarked = true;
+      }
+    }
+    if (!rangeMarked) {
+      const fallbackIndex = text
+        .slice(range.start, range.end)
+        .split("")
+        .findIndex((character) => !/\s/.test(character));
+      if (fallbackIndex >= 0) {
+        highlighted.set(range.start + fallbackIndex, range.reason);
+      }
+    }
+  });
+
+  for (let index = 0; index < text.length; index += 1) {
+    const reason = highlighted.get(index);
+    if (reason) {
+      nodes.push(
+        <span className="target-attention" title={reason} key={`${index}-${text[index]}`}>
+          {text[index]}
+        </span>,
+      );
+    } else {
+      nodes.push(text[index]);
+    }
+  }
+
+  return nodes;
+}
+
+function activeRailHeightFor(mode: Mode, text: string): number {
+  const lineHeight = mode === "drill" ? 34 : 34;
+  if (mode === "drill") return lineHeight;
+  const lineCount = Math.min(3, Math.max(1, text.split("\n").length));
+  return lineHeight * lineCount;
+}
+
+function changedCharacterIndexes(sourceText: string, targetText: string): Set<number> {
+  const rows = sourceText.length + 1;
+  const cols = targetText.length + 1;
+  const table = Array.from({ length: rows }, () => Array<number>(cols).fill(0));
+
+  for (let sourceIndex = sourceText.length - 1; sourceIndex >= 0; sourceIndex -= 1) {
+    for (let targetIndex = targetText.length - 1; targetIndex >= 0; targetIndex -= 1) {
+      table[sourceIndex][targetIndex] = sourceText[sourceIndex] === targetText[targetIndex]
+        ? table[sourceIndex + 1][targetIndex + 1] + 1
+        : Math.max(table[sourceIndex + 1][targetIndex], table[sourceIndex][targetIndex + 1]);
+    }
+  }
+
+  const matchedTargetIndexes = new Set<number>();
+  let sourceIndex = 0;
+  let targetIndex = 0;
+  while (sourceIndex < sourceText.length && targetIndex < targetText.length) {
+    if (sourceText[sourceIndex] === targetText[targetIndex]) {
+      matchedTargetIndexes.add(targetIndex);
+      sourceIndex += 1;
+      targetIndex += 1;
+    } else if (table[sourceIndex + 1][targetIndex] >= table[sourceIndex][targetIndex + 1]) {
+      sourceIndex += 1;
+    } else {
+      targetIndex += 1;
+    }
+  }
+
+  const changed = new Set<number>();
+  for (let index = 0; index < targetText.length; index += 1) {
+    if (!matchedTargetIndexes.has(index)) changed.add(index);
+  }
+  return changed;
 }
 
 function buildChallenges(config: TestConfig): Challenge[] {

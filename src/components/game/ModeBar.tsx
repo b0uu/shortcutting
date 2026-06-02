@@ -15,12 +15,6 @@ export function ModeBar({ config, hidden, onModeChange, onConfigChange }: ModeBa
   const [optionsOpen, setOptionsOpen] = useState(false);
   const modifier = config.platform === "mac" ? "⌥" : "alt";
   const difficultyLocked = config.mode === "drill";
-  const difficultyLabel = config.difficulty === "multiline" ? "multi-line" : config.difficulty;
-  const summaryParts = [
-    `${config.challengeCount} parts`,
-    ...(difficultyLocked ? [] : [difficultyLabel]),
-    config.mousePolicy === "keyboard-only" ? "keys only" : "mouse ok",
-  ];
 
   return (
     <div className={`modebar ${hidden ? "modebar-placeholder" : ""}`} aria-hidden={hidden ? true : undefined}>
@@ -35,43 +29,35 @@ export function ModeBar({ config, hidden, onModeChange, onConfigChange }: ModeBa
           coding
         </ModeButton>
       </div>
-      <div className={`mode-controls ${optionsOpen ? "open" : ""}`} aria-label="Run options">
+      <div className={`mode-controls ${optionsOpen ? "open" : ""} ${difficultyLocked ? "compact" : ""}`} aria-label="Run options">
         <div className={`mode-options-shell ${optionsOpen ? "open" : ""} ${difficultyLocked ? "compact" : ""}`}>
           <button
             type="button"
             className="mode-options-toggle"
-            aria-label={`Run options: ${summaryParts.join(", ")}`}
+            aria-label="Show run options"
             aria-expanded={optionsOpen}
             aria-controls="run-options-panel"
             disabled={hidden}
             onClick={() => setOptionsOpen((open) => !open)}
           >
-            <span className="gear-mark" aria-hidden="true">⚙</span>
-            {summaryParts.map((part) => <span className="summary-part" key={part}>{part}</span>)}
+            <span className="mode-options-label">options</span>
+            <span className="chevron-mark down" aria-hidden="true" />
           </button>
           <div className="mode-options-panel" id="run-options-panel" aria-hidden={optionsOpen ? undefined : true}>
-            <button
-              type="button"
-              className="mode-options-close"
-              aria-label="Collapse run options"
-              disabled={hidden}
-              tabIndex={optionsOpen ? 0 : -1}
-              onClick={() => setOptionsOpen(false)}
-            >
-              <span className="gear-mark" aria-hidden="true">⚙</span>
-            </button>
             {optionsOpen && (
               <>
                 <div className="mini-segment" aria-label="part count">
+                  <span className="segment-label">parts</span>
                   {[3, 4].map((count) => (
                     <button
                       key={count}
                       type="button"
+                      aria-label={`${count} parts`}
                       className={config.challengeCount === count ? "active" : ""}
                       disabled={hidden}
                       onClick={() => onConfigChange({ challengeCount: count as 3 | 4 })}
                     >
-                      {count} parts
+                      {count}
                     </button>
                   ))}
                 </div>
@@ -93,12 +79,24 @@ export function ModeBar({ config, hidden, onModeChange, onConfigChange }: ModeBa
                 <button
                   type="button"
                   className={`mode-meta-btn ${config.mousePolicy === "keyboard-only" ? "active" : ""}`}
+                  aria-label={config.mousePolicy === "keyboard-only" ? "keyboard only" : "mouse allowed"}
                   disabled={hidden}
                   onClick={() => onConfigChange({
                     mousePolicy: config.mousePolicy === "keyboard-only" ? "mouse-allowed" : "keyboard-only",
                   })}
                 >
-                  {config.mousePolicy === "keyboard-only" ? "keyboard only" : "mouse allowed"}
+                  {config.mousePolicy === "keyboard-only" ? "keys only" : "mouse ok"}
+                </button>
+                <button
+                  type="button"
+                  className="mode-options-close"
+                  aria-label="Collapse run options"
+                  disabled={hidden}
+                  tabIndex={optionsOpen ? 0 : -1}
+                  onClick={() => setOptionsOpen(false)}
+                >
+                  <span>done</span>
+                  <span className="chevron-mark up" aria-hidden="true" />
                 </button>
               </>
             )}

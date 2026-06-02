@@ -21,6 +21,46 @@ test("loads the shortcutting ready editor", async ({ page }) => {
   await expect(page.getByRole("button", { name: "target match" })).toHaveAttribute("aria-pressed", "true");
 });
 
+test("morphs run options without layout shift and avoids browser dialogs", async ({ page }) => {
+  const dialogs: string[] = [];
+  page.on("dialog", async (dialog) => {
+    dialogs.push(dialog.message());
+    await dialog.dismiss();
+  });
+
+  await page.goto("/");
+  const modebar = page.locator(".modebar");
+  const before = await modebar.boundingBox();
+  expect(before).not.toBeNull();
+  const attentionCount = await page.locator(".target-attention").count();
+  expect(attentionCount).toBeGreaterThan(0);
+  await expect(page.locator(".target-attention").first()).toHaveText(/^.$/);
+
+  await page.getByRole("button", { name: /show run options/i }).click();
+  await page.waitForTimeout(350);
+  const expanded = await modebar.boundingBox();
+  expect(expanded).not.toBeNull();
+  expect(Math.abs((expanded?.height ?? 0) - (before?.height ?? 0))).toBeLessThan(1);
+  await expect(page.getByRole("button", { name: /collapse run options/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: "4 parts" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "keyboard only" })).toBeVisible();
+
+  await page.getByRole("button", { name: /collapse run options/i }).click();
+  await page.waitForTimeout(350);
+  const collapsed = await modebar.boundingBox();
+  expect(Math.abs((collapsed?.height ?? 0) - (before?.height ?? 0))).toBeLessThan(1);
+
+  await page.getByTestId("editable-surface").press("a");
+  await page.getByRole("button", { name: /show run options/i }).click();
+  await page.getByRole("button", { name: "4 parts" }).click();
+  await expect(page.getByTestId("timer")).toHaveText("00:00.0");
+  await expect(page.locator(".pips")).toHaveAttribute("aria-label", "1 of 4 parts");
+  await page.getByTestId("editable-surface").press("a");
+  await page.getByRole("button", { name: "coding" }).click();
+  await expect(page.getByText(/python target/i)).toBeVisible();
+  expect(dialogs).toEqual([]);
+});
+
 test("completes a 3-part run, persists PB, exports share card, and supports light theme", async ({ page }) => {
   await page.goto("/");
   await page.evaluate(() => localStorage.clear());
@@ -155,6 +195,10 @@ test("keeps the target panel and active editor stable when the target changes", 
   const editorBefore = await page.getByTestId("active-segment").boundingBox();
   const labelBefore = await page.locator(".edit-label").boundingBox();
   const firstTarget = await page.locator(".target-block").textContent();
+  await expect.poll(async () => page.evaluate(() => {
+    const activeSegment = document.querySelector(".active-segment");
+    return activeSegment ? Number.parseFloat(getComputedStyle(activeSegment, "::before").height) : 0;
+  })).toBeLessThanOrEqual(36);
 
   await page.locator("[data-testid=\"editable-surface\"]").evaluate((node, value) => {
     node.textContent = value;
@@ -283,7 +327,7 @@ test("keeps drill reset below the active editing line", async ({ page }) => {
     if (!active) return Number.POSITIVE_INFINITY;
     const style = getComputedStyle(active, "::before");
     return Number.parseFloat(style.height);
-  })).toBeLessThanOrEqual(56);
+  })).toBeLessThanOrEqual(42);
   await expect(page.getByTestId("drill-safety")).toHaveCount(0);
 
   await editor.press("Backspace");
@@ -318,4 +362,9 @@ test("keeps drill completion rail anchored to the active line", async ({ page })
     const railBottom = activeRect.bottom - Number.parseFloat(style.bottom);
     return railBottom - resetRect.top;
   })).toBeLessThanOrEqual(0);
+  await expect.poll(async () => page.evaluate(() => {
+    const active = document.querySelector<HTMLElement>(".active-segment");
+    if (!active) return Number.POSITIVE_INFINITY;
+    return Number.parseFloat(getComputedStyle(active, "::after").height);
+  })).toBeLessThanOrEqual(42);
 });

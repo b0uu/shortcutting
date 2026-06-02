@@ -1,15 +1,23 @@
-import type { Challenge, DrillDefinition, Platform } from "./types";
+import type { Challenge, DrillDefinition, Platform, SkillPack, SkillTag } from "./types";
 
 const drillDefinitions: Array<{
   instruction: string;
   editableText: string;
   targetText: string;
+  skillPacks: SkillPack[];
+  skillTags: SkillTag[];
+  intendedShortcutPath: string[];
+  attention: string[];
   definition: DrillDefinition;
 }> = [
   {
     instruction: "Delete the previous word.",
     editableText: "Keep the final draft",
     targetText: "Keep the final ",
+    skillPacks: ["deletion-cleanup", "word-movement"],
+    skillTags: ["word-deletion", "word-navigation"],
+    intendedShortcutPath: ["place caret after word", "delete previous word"],
+    attention: ["previous word"],
     definition: {
       id: "delete-previous-word",
       instruction: "Delete the previous word.",
@@ -25,6 +33,10 @@ const drillDefinitions: Array<{
     instruction: "Delete the next word.",
     editableText: "Remove noisy copy now",
     targetText: "Remove copy now",
+    skillPacks: ["deletion-cleanup", "word-movement"],
+    skillTags: ["word-deletion", "word-navigation"],
+    intendedShortcutPath: ["place caret before word", "delete next word"],
+    attention: ["next word"],
     definition: {
       id: "delete-next-word",
       instruction: "Delete the next word.",
@@ -40,6 +52,10 @@ const drillDefinitions: Array<{
     instruction: "Move to the previous word.",
     editableText: "Jump back quickly",
     targetText: "Jump back quickly",
+    skillPacks: ["word-movement"],
+    skillTags: ["word-navigation"],
+    intendedShortcutPath: ["use previous-word movement"],
+    attention: ["previous word"],
     definition: {
       id: "move-previous-word",
       instruction: "Move to the previous word.",
@@ -55,6 +71,10 @@ const drillDefinitions: Array<{
     instruction: "Move to the next word.",
     editableText: "Jump ahead quickly",
     targetText: "Jump ahead quickly",
+    skillPacks: ["word-movement"],
+    skillTags: ["word-navigation"],
+    intendedShortcutPath: ["use next-word movement"],
+    attention: ["next word"],
     definition: {
       id: "move-next-word",
       instruction: "Move to the next word.",
@@ -70,6 +90,10 @@ const drillDefinitions: Array<{
     instruction: "Select the previous word.",
     editableText: "Select this word",
     targetText: "Select this word",
+    skillPacks: ["selection-practice", "word-movement"],
+    skillTags: ["selection", "word-navigation"],
+    intendedShortcutPath: ["hold selection modifier", "move to previous word"],
+    attention: ["previous word"],
     definition: {
       id: "select-previous-word",
       instruction: "Select the previous word.",
@@ -85,6 +109,10 @@ const drillDefinitions: Array<{
     instruction: "Replace the current word.",
     editableText: "Use a rough label.",
     targetText: "Use a clear label.",
+    skillPacks: ["selection-practice", "deletion-cleanup"],
+    skillTags: ["selection", "replacement"],
+    intendedShortcutPath: ["select current word", "type replacement"],
+    attention: ["current word"],
     definition: {
       id: "replace-current-word",
       instruction: "Replace the current word.",
@@ -100,6 +128,10 @@ const drillDefinitions: Array<{
     instruction: "Insert punctuation at the target position.",
     editableText: "Pause here then continue.",
     targetText: "Pause here, then continue.",
+    skillPacks: ["punctuation-casing"],
+    skillTags: ["punctuation-insertion", "character-navigation"],
+    intendedShortcutPath: ["move to punctuation position", "insert comma"],
+    attention: ["punctuation"],
     definition: {
       id: "insert-punctuation",
       instruction: "Insert punctuation at the target position.",
@@ -124,12 +156,31 @@ export function generateDrillChallenges(count: number, seed: string): Challenge[
       prompt: drill.instruction,
       targetText: drill.targetText,
       editableText: drill.editableText,
-      errors: [],
-      skillPacks: ["deletion-cleanup"],
+      errors: drill.skillTags.map((skillTag, errorIndex) => ({
+        id: `drill-err-${index + 1}-${errorIndex + 1}`,
+        type: drill.definition.validation.type === "selection" ? "wrong-character-order" : "missing-character",
+        skillTags: [skillTag],
+      })),
+      skillPacks: drill.skillPacks,
+      intendedShortcutPath: drill.intendedShortcutPath,
+      attentionRanges: buildPromptAttentionRanges(drill.instruction, drill.attention, drill.skillTags),
       difficulty: "standard",
       estimatedCorrections: 1,
       drill: drill.definition,
     };
+  });
+}
+
+function buildPromptAttentionRanges(text: string, phrases: string[], skillTags: SkillTag[]) {
+  return phrases.flatMap((phrase) => {
+    const start = text.toLowerCase().indexOf(phrase.toLowerCase());
+    if (start < 0) return [];
+    return [{
+      start,
+      end: start + phrase.length,
+      reason: `focus on ${phrase}`,
+      skillTags,
+    }];
   });
 }
 

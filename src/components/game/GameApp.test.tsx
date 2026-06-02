@@ -18,7 +18,6 @@ describe("GameApp", () => {
 
     expect(screen.queryByRole("button", { name: /start challenge/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: /target match/i })).not.toBeInTheDocument();
-    expect(screen.getAllByText(/3 parts/i).length).toBeGreaterThan(0);
     expect(screen.getByLabelText(/1 of 3 parts/i)).toBeInTheDocument();
     expect(screen.getByTestId("timer")).toHaveTextContent("00:00.0");
     expect(screen.getByTestId("editable-surface")).toHaveAttribute("contenteditable", "true");
@@ -158,14 +157,14 @@ describe("GameApp", () => {
     fireEvent.keyDown(screen.getByRole("dialog", { name: /settings/i }), { key: "Escape" });
     act(() => vi.advanceTimersByTime(0));
     expect(screen.queryByRole("button", { name: /start challenge/i })).not.toBeInTheDocument();
-    expect(screen.getAllByText(/4 parts/i).length).toBeGreaterThan(0);
+    expect(document.querySelector(".pips")).toHaveAttribute("aria-label", "1 of 4 parts");
     expect(settingsButton).toHaveFocus();
   });
 
   it("keeps run options collapsed until opened from the mode bar", () => {
     render(<GameApp />);
 
-    const toggle = screen.getByRole("button", { name: /3 parts.*standard.*keys only/i });
+    const toggle = screen.getByRole("button", { name: /show run options/i });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByLabelText("difficulty")).not.toBeInTheDocument();
 
@@ -173,7 +172,18 @@ describe("GameApp", () => {
 
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByLabelText("difficulty")).toBeInTheDocument();
+    expect(screen.getByText("parts")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "multi-line" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /collapse run options/i })).toBeInTheDocument();
+  });
+
+  it("renders subtle target attention ranges from challenge metadata", () => {
+    render(<GameApp />);
+
+    const highlighted = document.querySelectorAll(".target-attention");
+    expect(highlighted.length).toBeGreaterThan(0);
+    expect(Array.from(highlighted).every((node) => (node.textContent ?? "").length === 1)).toBe(true);
+    expect(Array.from(highlighted).every((node) => activeTargetText().includes(node.textContent ?? ""))).toBe(true);
   });
 
   it("applies and persists custom theme colors from settings", () => {
@@ -191,10 +201,10 @@ describe("GameApp", () => {
     expect(stored.customTheme.accent).toBe("#336699");
   });
 
-  it("persists detailed settings and resets local history with confirmation", () => {
+  it("persists detailed settings and resets local history without a browser popup", () => {
     window.localStorage.setItem("shortcutting:results", JSON.stringify([{ id: "old" }]));
     window.localStorage.setItem("shortcutting:personal-bests", JSON.stringify({ best: { id: "old" } }));
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const confirmSpy = vi.spyOn(window, "confirm").mockImplementation(() => false);
 
     render(<GameApp />);
     fireEvent.click(screen.getByRole("button", { name: "settings" }));
@@ -207,6 +217,29 @@ describe("GameApp", () => {
     expect(stored.smartPairs).toBe(false);
     expect(window.localStorage.getItem("shortcutting:results")).toBeNull();
     expect(window.localStorage.getItem("shortcutting:personal-bests")).toBeNull();
+    expect(confirmSpy).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it("does not use browser popups for mid-run mode or option changes", () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockImplementation(() => false);
+    render(<GameApp />);
+    beginRun();
+
+    fireEvent.click(screen.getByRole("button", { name: /show run options/i }));
+    fireEvent.click(screen.getByRole("button", { name: "4 parts" }));
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(screen.getByTestId("timer")).toHaveTextContent("00:00.0");
+    expect(screen.getByLabelText(/1 of 4 parts/i)).toBeInTheDocument();
+
+    beginRun();
+    fireEvent.click(screen.getByRole("button", { name: "drill" }));
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(activeTargetText()).toMatch(/delete the previous word/i);
+    expect(screen.getByTestId("timer")).toHaveTextContent("00:00.0");
+    confirmSpy.mockRestore();
   });
 
   it("completes a configured 4-part run", async () => {

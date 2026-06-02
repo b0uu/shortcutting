@@ -16,6 +16,8 @@ const challenge = (id: string): Challenge => ({
   editableText: `${id} edit`,
   errors: [],
   skillPacks: ["word-movement"],
+  intendedShortcutPath: ["jump by word"],
+  attentionRanges: [],
   difficulty: "standard",
   estimatedCorrections: 1,
 });

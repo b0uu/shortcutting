@@ -76,6 +76,13 @@ export type ChallengeError = {
   skillTags: SkillTag[];
 };
 
+export type AttentionRange = {
+  start: number;
+  end: number;
+  reason: string;
+  skillTags: SkillTag[];
+};
+
 export type DrillValidation =
   | { type: "text"; expectedText: string }
   | { type: "cursor"; expectedIndex: number }
@@ -99,6 +106,8 @@ export type Challenge = {
   editableText: string;
   errors: ChallengeError[];
   skillPacks: SkillPack[];
+  intendedShortcutPath: string[];
+  attentionRanges: AttentionRange[];
   difficulty: Difficulty;
   estimatedCorrections: number;
   drill?: DrillDefinition;
