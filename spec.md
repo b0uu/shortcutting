@@ -69,7 +69,7 @@ The app should feel:
 - Final name: shortcutting
 - Default run length: currently at 3
 - Default mouse policy: keyboard-only
-- Difficulty: universal difficulty level rn
+- Difficulty: Standard, Advanced, and Multi-line
 - Downloadable share cards
 - Backend: not required for first playable MVP, but to be implemented
 - Data approach: local-first initially, but build with Supabase compatible architecture
@@ -78,7 +78,7 @@ Backend build process:
 - Build the core game local-first.
 - Define a clean `ResultLogger` interface from the beginning.
 - Start with `LocalResultLogger`.
-- Add `SupabaseResultLogger` once the core loop, validation, and results screen feel good
+- Add `SupabaseResultLogger` only after the local-first product, analytics, history, and results screen feel good
 - This keeps the MVP fast while preserving the product/data side later
 
 
@@ -88,6 +88,7 @@ Backend build process:
 - No login required
 - Target match mode
 - Drill mode
+- Python-only Coding Mode
 - Completion based tests
 - Time as the primary score
 - Mac, windows, linux support
@@ -96,17 +97,19 @@ Backend build process:
 - Hints after 5 seconds of inactivity
 - Mouse policy settings
 - Shortcut-path/event recording
-- Keep track locally of personal bests & past scores
+- Keep track locally of personal bests, past scores, and run history
 - Shareable visual result card
-- Dark mode & light mode first, with customizeablility added later 
+- Dark mode, light mode, and user-editable custom theme colors
 - Sound effects with toggle
 - Seeded challenge generation
 - Deterministic templates that nurture learning and feel good to complete
+- Skill-pack metadata for future analytics and adaptive practice
+- Keyboard shortcut map
+- Detailed settings
 
 ### Exclude from MVP
 
 - Blind Fix mode
-- Coding mode
 - Vim mode
 - Terminal mode
 - ^ For the above could probably get devs to contribute
@@ -266,13 +269,13 @@ Because time is the easiest metric that all users will understand. Will make the
 The user sees one continuous test made of 3 parts by default. Avoid exposing the word "challenge" in the live UI where "part" or "3-part challenge" is clearer.
 
 Pre-test controls:
-- Mode: Target Match or Drill
+- Mode: Target Match / Drill / Coding
 - Platform: Auto / Mac / Windows-Linux
 - Length: 3 or 4 parts
-- Difficulty: Standard only
+- Difficulty: Standard / Advanced / Multi-line
 - Mouse policy: Keyboard-only / Mouse allowed
 - Sound: On / Off
-- Theme: Dark / Light
+- Theme: Dark / Light / Custom
 
 There is no Start button and no intro overlay. The editor is ready immediately, and the timer starts on the first meaningful edit key or input. Tab, Escape, arrow keys, and modifier-only keys do not start the timer.
 
@@ -298,7 +301,18 @@ Whitespace matters. The only normalization allowed is cleanup of browser `conten
 
 Challenge generation is deterministic, seeded, and template-based. No AI-generated challenges in MVP.
 
-MVP templates should use concise productivity, developer, and casual workplace text. Track hidden error/skill tags for analytics, but keep them out of the main UI.
+MVP templates should use concise productivity, developer, and casual workplace text. Track hidden error, skill-pack, and difficulty tags for analytics, but keep them out of the main active-test UI.
+
+Challenge quality should optimize for making users feel good about using shortcuts. Default content should be approachable, repeatable, and satisfying, even if it sacrifices a little realism. Treat Monkeytype's default lowercase-word feel as the benchmark for approachability.
+
+Skill packs should exist in the data model even when not exposed directly:
+- Word movement
+- Deletion cleanup
+- Punctuation and casing
+- Line reshaping
+- Code cleanup
+- Code refactor micro-edits
+- Selection practice
 
 Supported error families:
 - Extra, missing, or wrong word
@@ -307,6 +321,15 @@ Supported error families:
 - Extra/missing character
 - Extra/missing newline
 - Wrong word or character order
+
+## 9.1 Difficulty
+
+Supported difficulty levels:
+- Standard: short single-line or simple edit flow.
+- Advanced: longer text, more required edits, and more mixed skill tags.
+- Multi-line: paragraph or block edits with meaningful newlines.
+
+Difficulty affects generation, result buckets, personal bests, analytics, history filters, and settings. Multi-line difficulty preserves exact whitespace validation and starts the cursor at the end of the editable passage.
 
 ## 10. Drill Mode
 
@@ -324,6 +347,37 @@ Drills validate by text, cursor position, selection range, or a combination, dep
 Because drills are easier to damage accidentally, show a plain `reset drill` button below the active editing line during an active drill. It restores only the current drill text and starting selection. It must not reset completed parts or the run timer.
 
 Platform-specific hints may appear after the idle timeout, but Drill Mode should not show persistent shortcut instructions by default.
+
+## 10.1 Coding Mode
+
+Coding Mode is part of the next MVP extension. It starts as Python-only.
+
+Coding Mode asks the user to edit realistic but approachable Python snippets until the editable code exactly matches the target code.
+
+Rules:
+- Default language is Python.
+- Validation is exact final text, including indentation and newlines.
+- Do not validate final cursor or selection state in Coding Mode.
+- Use deterministic Python templates, not AI-generated snippets.
+- Include hidden skill-pack metadata such as punctuation, indentation, rename, boolean cleanup, argument cleanup, string cleanup, and simple refactor.
+- Use a coding-themed editable box that fits the existing visual language.
+
+Editor behavior:
+- `(` inserts `()` and places the caret inside.
+- `[` inserts `[]` and places the caret inside.
+- `{` inserts `{}` and places the caret inside.
+- Quote keys insert paired quotes when appropriate.
+- Backspace on an empty pair removes both.
+- Enter preserves indentation.
+- Tab indents inside Coding Mode.
+
+Non-goals:
+- No syntax parsing.
+- No linting.
+- No formatting engine.
+- No autocomplete.
+- No multi-language support yet.
+- No full IDE simulation.
 
 ## 11. Editor behavior
 
@@ -375,6 +429,11 @@ Secondary stats:
 - Mouse actions
 - Clipboard actions
 - Undo/redo counts when trackable
+- Edits per minute
+- Estimated correction count
+- Skill tag summary
+- Best skill category
+- Slowest skill category
 
 Personal bests are local-first and segmented by:
 - Mode
@@ -387,10 +446,18 @@ Personal bests are local-first and segmented by:
 Results screen:
 - Large elapsed time
 - PB badge when applicable
-- Three compact stat cards
+- Compact stat cards for the most important metrics
+- Skill and difficulty summary
 - Share-card preview
 - Download card and play again actions
 - Keyboard focus affordance for result actions
+
+History view:
+- Recent local runs
+- Filters by mode and difficulty
+- Personal bests
+- Run detail with final text and share-card action
+- Clear-history action with confirmation
 
 ## 14. Share card
 
@@ -404,7 +471,7 @@ The card should show:
 - Brand
 - Before/after text
 
-For multi-part runs, use the full-run before/after text unless a later design deliberately switches to a representative pair. Keep the card readable and dark-theme consistent.
+For multi-part runs, use the full-run before/after text unless a later design deliberately switches to a representative pair. Keep the card readable and consistent with the active theme.
 
 ## 15. Persistence and logging
 
@@ -414,8 +481,9 @@ Store in `localStorage`:
 - Settings
 - Result summaries
 - Personal bests
+- Recent run history
 
-Detailed edit events may stay in memory for MVP unless persistence remains simple and small.
+Detailed edit events may stay in memory unless persistence remains simple and small. Persist summaries and lightweight per-part metadata for analytics and history.
 
 Keep result logging behind an interface so a backend can be added later without changing game logic.
 
@@ -434,7 +502,7 @@ Shortcut labels should be clear and compact. Symbols are fine for common Mac sho
 ## 17. UI and motion direction
 
 Visual direction:
-- Dark mode first, light mode usable
+- Dark mode default, light mode usable, custom themes supported
 - Minimal, focused, and Monkeytype-inspired
 - Avoid dashboards during the test
 - Avoid boxy line-by-line cards in the editor
@@ -449,6 +517,35 @@ Motion:
 Sound:
 - Optional, quiet, and minimal.
 - Toggle in settings.
+
+Themes:
+- Settings include dark, light, and custom.
+- Custom themes expose user-editable colors for background, panel, text, muted text, accent, success, error, and caret/focus if separate.
+- Theme values are applied through CSS custom properties.
+- Theme settings persist locally.
+- Share cards use the active theme.
+
+Keyboard shortcut map:
+- Informational only.
+- Platform-aware using the current platform setting.
+- Actions are buttons labeled by command.
+- Selecting an action lights up a mock keyboard and displays the shortcut sequence.
+- Include word movement, word deletion, word selection, line start/end, undo/redo, copy/cut/paste, select all, and Coding Mode indentation.
+
+Detailed settings:
+- Mode
+- Difficulty
+- Part count
+- Platform
+- Mouse policy
+- Theme mode
+- Custom theme colors
+- Coding language display set to Python only
+- Smart pairs toggle for Coding Mode
+- Sound toggle
+- Reduced motion toggle
+- Reset local data/history with confirmation
+- Shortcut map entry point
 
 ## 18. Tech stack
 
@@ -469,16 +566,20 @@ Do not add Tailwind for the current MVP; the design uses direct CSS tokens and s
 Keep these core models:
 - `Challenge`
 - `DrillDefinition`
+- `CodingChallenge`
 - `SelectionState`
 - `TestConfig`
 - `ChallengeResult`
 - `TestResult`
 - `PersonalBestKey`
 - `ResultLogger`
+- `ThemeSettings`
+- `HistoryEntry`
+- `ShortcutDefinition`
 
-`TestConfig.challengeCount` is currently `3 | 4`.
+`TestConfig.challengeCount` is currently `3 | 4`. `TestConfig.difficulty` is `standard | advanced | multiline`. Coding Mode is Python-only for now.
 
-`EditEvent` should capture key/input/selection/mouse/clipboard/hint events with timestamps, challenge IDs, before/after text, and selection state where available. It is mainly for future analytics and replay, not for active UI clutter.
+`EditEvent` should capture key/input/selection/mouse/clipboard/hint events with timestamps, challenge IDs, before/after text, and selection state where available. It supports local analytics and future replay, not active UI clutter.
 
 ## 20. Backend and later features
 
@@ -488,11 +589,9 @@ Later candidates:
 - Anonymous result logging
 - Aggregate stats
 - Daily seeded challenge
-- Skill analytics
 - Replay timeline
-- Adaptive difficulty
 - Custom challenge creator
-- Code-editing mode
+- Additional coding languages
 - Vim mode
 - Browser/system shortcut training
 
@@ -501,15 +600,15 @@ Later candidates:
 - Product name: shortcutting
 - Website target: shortcutting.xyz
 - Default run: 3 parts
-- MVP modes: Target Match and Drill Mode
+- MVP modes: Target Match, Drill Mode, and Python Coding Mode
 - Default mouse policy: Keyboard-only
-- MVP difficulty: Standard only
+- MVP difficulty: Standard, Advanced, and Multi-line
 - MVP includes downloadable share cards
 - MVP is local-first
 - Supabase is deferred
 - No login
 - No global leaderboard
 - No AI-generated challenges
-- No code-editing mode yet
+- Coding Mode is Python-only at first
 - No Vim mode yet
 - No browser/system shortcut training

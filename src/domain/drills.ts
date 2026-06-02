@@ -125,6 +125,7 @@ export function generateDrillChallenges(count: number, seed: string): Challenge[
       targetText: drill.targetText,
       editableText: drill.editableText,
       errors: [],
+      skillPacks: ["deletion-cleanup"],
       difficulty: "standard",
       estimatedCorrections: 1,
       drill: drill.definition,

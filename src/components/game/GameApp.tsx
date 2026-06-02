@@ -3,10 +3,12 @@
 import { MotionConfig } from "framer-motion";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { generateTargetChallenges, seedPack } from "@/domain/challenges";
+import { generatePythonChallenges } from "@/domain/coding";
 import { generateDrillChallenges } from "@/domain/drills";
 import { createEditEvent } from "@/domain/events";
 import { detectPlatform, resolvePlatform } from "@/domain/platform";
 import { personalBestKey, summarizeResult } from "@/domain/results";
+import { colorsForTheme, darkThemeColors, themeCssVariables } from "@/domain/themes";
 import {
   completeActiveSegment,
   createSegments,
@@ -27,6 +29,8 @@ import type {
 import { LocalResultLogger } from "@/storage/localResultLogger";
 import { loadSettings, saveSettings } from "@/storage/settingsStore";
 import { Header } from "@/components/layout/Header";
+import { HistoryPanel } from "@/components/history/HistoryPanel";
+import { ShortcutMapPanel } from "@/components/shortcuts/ShortcutMapPanel";
 import { SettingsPanel } from "@/components/settings/SettingsPanel";
 import { ResultsScreen } from "@/components/results/ResultsScreen";
 import { ShortcutHint } from "@/components/ui/ShortcutHint";
@@ -63,6 +67,10 @@ const defaultConfig: TestConfig = {
   difficulty: "standard",
   soundEnabled: true,
   theme: "dark",
+  customTheme: darkThemeColors,
+  codingLanguage: "python",
+  smartPairs: true,
+  reducedMotion: false,
   seedPack,
 };
 
@@ -75,6 +83,8 @@ export function GameApp() {
   const [segments, setSegments] = useState<ChallengeSegment[]>(() => createSegments(challenges));
   const [selection, setSelection] = useState<SelectionState>(() => initialSelection(challenges[0]));
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [shortcutMapOpen, setShortcutMapOpen] = useState(false);
   const [showHint, setShowHint] = useState(false);
   const [now, setNow] = useState(0);
   const [runStartTime, setRunStartTime] = useState<number | null>(null);
@@ -107,6 +117,8 @@ export function GameApp() {
   const midChallenge = phase === "active";
   const active = phase !== "complete";
   const visibleElapsed = result?.elapsedMs ?? (runStartTime === null ? 0 : now - runStartTime);
+  const activeThemeColors = useMemo(() => colorsForTheme(config.theme, config.customTheme), [config.customTheme, config.theme]);
+  const activeThemeStyle = useMemo(() => themeCssVariables(activeThemeColors) as CSSProperties, [activeThemeColors]);
   // Native caret is an intentional MVP fallback until custom mid-text cursor rendering is robust.
   const nativeCaretFallback = true;
 
@@ -126,10 +138,17 @@ export function GameApp() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = config.theme;
+    const variables = themeCssVariables(activeThemeColors);
+    for (const [key, value] of Object.entries(variables)) {
+      document.documentElement.style.setProperty(key, value);
+    }
     return () => {
       delete document.documentElement.dataset.theme;
+      for (const key of Object.keys(variables)) {
+        document.documentElement.style.removeProperty(key);
+      }
     };
-  }, [config.theme]);
+  }, [activeThemeColors, config.theme]);
 
   useEffect(() => {
     latestText.current = currentText;
@@ -161,6 +180,16 @@ export function GameApp() {
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
+      if (shortcutMapOpen && event.key === "Escape") {
+        closeShortcutMap();
+        return;
+      }
+
+      if (historyOpen && event.key === "Escape") {
+        closeHistory();
+        return;
+      }
+
       if (settingsOpen && event.key === "Escape") {
         closeSettings();
         return;
@@ -188,16 +217,22 @@ export function GameApp() {
       } else if (key === "2") {
         event.preventDefault();
         changeMode("drill");
+      } else if (key === "3") {
+        event.preventDefault();
+        changeMode("coding");
       } else if (key === "h") {
         event.preventDefault();
-        window.location.href = "/";
+        goHome();
+      } else if (key === "y") {
+        event.preventDefault();
+        openHistory();
       }
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settingsOpen, phase, midChallenge, config.mode]);
+  }, [historyOpen, settingsOpen, shortcutMapOpen, phase, midChallenge, config.mode]);
 
   const resetPreview = useCallback((nextConfig: TestConfig) => {
     clearScheduledWork();
@@ -224,6 +259,7 @@ export function GameApp() {
   }, []);
 
   function updateConfig(patch: Partial<TestConfig>) {
+    if (midChallenge && !window.confirm("Leave this run and apply the new option?")) return;
     const detected = detectPlatform(navigator.userAgent, navigator.platform);
     const nextPreference = patch.platformPreference ?? config.platformPreference;
     const nextConfig = {
@@ -233,11 +269,24 @@ export function GameApp() {
     };
     setConfig(nextConfig);
     saveSettings(nextConfig);
-    if (!midChallenge) resetPreview(nextConfig);
+    resetPreview(nextConfig);
   }
 
   function changeMode(mode: Mode) {
     updateConfig({ mode });
+  }
+
+  function goHome() {
+    if (midChallenge && !window.confirm("Leave this run and return home?")) return;
+    closeSettings();
+    closeHistory();
+    closeShortcutMap();
+    resetPreview(config);
+  }
+
+  function giveUp() {
+    if (midChallenge && !window.confirm("Give up this run and try again?")) return;
+    resetPreview(config);
   }
 
   function startRunFromEditorInput() {
@@ -332,6 +381,7 @@ export function GameApp() {
     if (phaseRef.current !== "active") return;
     if (config.mousePolicy === "keyboard-only" && runStartTime !== null) {
       event.preventDefault();
+      event.stopPropagation();
       return;
     }
     stats.current.mouseActions += 1;
@@ -339,6 +389,13 @@ export function GameApp() {
       textBefore: latestText.current,
       selectionBefore: latestSelection.current,
     }));
+  }
+
+  function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (phaseRef.current !== "active") return;
+    if (config.mousePolicy !== "keyboard-only" || runStartTime === null) return;
+    event.preventDefault();
+    event.stopPropagation();
   }
 
   function handleClipboard(type: "copy" | "cut" | "paste") {
@@ -388,6 +445,8 @@ export function GameApp() {
       targetText: challenge.targetText,
       finalText,
       elapsedMs: completedAt - startedAt,
+      skillTags: Array.from(new Set(challenge.errors.flatMap((error) => error.skillTags))),
+      estimatedCorrections: challenge.estimatedCorrections,
       ...stats.current,
     };
     challengeResults.current = [...challengeResults.current, challengeResult];
@@ -459,9 +518,31 @@ export function GameApp() {
     if (!midChallenge) setSettingsOpen(true);
   }
 
+  function openHistory() {
+    if (!midChallenge) setHistoryOpen(true);
+  }
+
+  function closeHistory() {
+    setHistoryOpen(false);
+  }
+
+  function openShortcutMap() {
+    setSettingsOpen(false);
+    setShortcutMapOpen(true);
+  }
+
+  function closeShortcutMap() {
+    setShortcutMapOpen(false);
+  }
+
   function closeSettings() {
     setSettingsOpen(false);
     window.setTimeout(() => settingsButtonRef.current?.focus(), 0);
+  }
+
+  async function resetLocalData() {
+    if (!window.confirm("Reset local history and personal bests?")) return;
+    await logger.clearLocalResults();
   }
 
   function hideHintImmediately() {
@@ -487,23 +568,39 @@ export function GameApp() {
 
   const partNumber = challengeIndex + 1;
   const totalParts = challenges.length;
-  const hasCompletedSegments = segments.some((segment) => segment.status === "complete");
+  const showCompletedSegments = config.mode !== "coding";
+  const hasCompletedSegments = showCompletedSegments && segments.some((segment) => segment.status === "complete");
   const drillResetVisible = config.mode === "drill" && phase === "active";
   const editorFlowStyle = {
     "--completion-rail-height": `${completionRailHeight}px`,
   } as CSSProperties;
 
   return (
-    <MotionConfig reducedMotion="user">
-    <div className="app-shell" data-theme={config.theme}>
-      <div className="app-content" inert={settingsOpen ? true : undefined} aria-hidden={settingsOpen}>
-      <Header onSettings={openSettings} settingsDisabled={midChallenge} settingsButtonRef={settingsButtonRef} />
-      <ModeBar config={config} hidden={phase !== "pre-test"} onModeChange={changeMode} />
+    <MotionConfig reducedMotion={config.reducedMotion ? "always" : "user"}>
+    <div className="app-shell" data-theme={config.theme} style={activeThemeStyle}>
+      <div className="app-content" inert={settingsOpen || historyOpen || shortcutMapOpen ? true : undefined} aria-hidden={settingsOpen || historyOpen || shortcutMapOpen}>
+      <Header
+        platform={config.platform}
+        onHome={goHome}
+        onHistory={openHistory}
+        onSettings={openSettings}
+        historyDisabled={midChallenge}
+        settingsDisabled={midChallenge}
+        settingsButtonRef={settingsButtonRef}
+      />
+      {phase !== "complete" && (
+        <ModeBar
+          config={config}
+          hidden={false}
+          onModeChange={changeMode}
+          onConfigChange={updateConfig}
+        />
+      )}
       <main className={screenFading ? "screen-crossfade" : ""}>
         {phase === "complete" && result ? (
-          <ResultsScreen result={result} onPlayAgain={playAgain} />
+          <ResultsScreen result={result} themeColors={activeThemeColors} onPlayAgain={playAgain} />
         ) : (
-          <section className={`game-view ${config.mode === "drill" ? "drill-view" : ""}`}>
+          <section className={`game-view difficulty-${config.difficulty} ${config.mode === "drill" ? "drill-view" : ""} ${config.mode === "coding" ? "coding-view" : ""}`}>
             <div className="status-row">
               <span className={`timer ${runStartTime !== null ? "running" : ""}`} data-testid="timer">
                 {formatElapsed(visibleElapsed)}
@@ -512,7 +609,7 @@ export function GameApp() {
             </div>
             <div className={`target-panel ${partTransition ? "updated" : ""}`} aria-live="polite">
               <div className="block-label accent">
-                <span>{challenge.mode === "target-match" ? "target" : "prompt"}</span>
+                <span>{challenge.mode === "target-match" ? "target" : challenge.mode === "coding" ? "python target" : "prompt"}</span>
                 <span className="part-label">part {partNumber} of {totalParts}</span>
               </div>
               <div
@@ -520,7 +617,7 @@ export function GameApp() {
                 className={`target-block ${partTransition ? "target-switched" : ""}`}
                 id="target-text"
               >
-                {challenge.mode === "target-match" ? challenge.targetText : challenge.prompt}
+                {challenge.mode === "drill" ? challenge.prompt : challenge.targetText}
               </div>
             </div>
             <div className={`editor-zone ${hasCompletedSegments ? "has-history" : ""} ${drillResetVisible ? "has-reset" : ""}`}>
@@ -528,7 +625,7 @@ export function GameApp() {
               <div className={`editor-flow ${flowMatched ? "matched" : ""} ${drillResetVisible ? "has-reset" : ""}`} data-testid="editor-flow" style={editorFlowStyle}>
                 <div className="locked-stack" aria-label="Completed edit history">
                   <div className="locked-stack-inner" ref={lockedStackInnerRef}>
-                    {segments.map((segment, index) => (
+                    {showCompletedSegments && segments.map((segment, index) => (
                       segment.status === "complete" ? (
                         <div
                           key={segment.challenge.id}
@@ -553,9 +650,11 @@ export function GameApp() {
                       nativeCaretFallback={nativeCaretFallback}
                       initialSelection={challengeInitialSelection}
                       resetKey={editorResetKey}
+                      smartPairs={config.mode === "coding" && config.smartPairs}
                       onInputText={handleInputText}
                       onSelection={handleSelection}
                       onKeyDown={handleEditorKeyDown}
+                      onPointerDown={handlePointerDown}
                       onMouseDown={handleMouseDown}
                       onClipboard={handleClipboard}
                     />
@@ -565,7 +664,7 @@ export function GameApp() {
                   <div className="drill-safety" data-testid="drill-safety">
                     <button type="button" className="btn-ghost" onClick={resetCurrentDrill}>
                       <span>reset drill</span>
-                      <ShortcutHint keys={["alt", "R"]} />
+                      <ShortcutHint keys={[config.platform === "mac" ? "⌥" : "alt", "R"]} />
                     </button>
                   </div>
                 )}
@@ -577,6 +676,19 @@ export function GameApp() {
       {phase !== "complete" && (
         <footer>
           <span><kbd className="kbd">esc</kbd> settings</span>
+          <button
+            type="button"
+            className="footer-keyboard"
+            onClick={openShortcutMap}
+          >
+            <span aria-hidden="true">⌨</span>
+            <span>shortcut map</span>
+          </button>
+          {midChallenge && (
+            <button type="button" className="footer-keyboard danger-footer-action" onClick={giveUp}>
+              give up
+            </button>
+          )}
         </footer>
       )}
       </div>
@@ -585,6 +697,18 @@ export function GameApp() {
         config={config}
         onClose={closeSettings}
         onChange={updateConfig}
+        onShortcutMap={openShortcutMap}
+        onResetLocalData={resetLocalData}
+      />
+      <HistoryPanel
+        open={historyOpen}
+        logger={logger}
+        onClose={closeHistory}
+      />
+      <ShortcutMapPanel
+        open={shortcutMapOpen}
+        platform={config.platform}
+        onClose={closeShortcutMap}
       />
     </div>
     </MotionConfig>
@@ -592,9 +716,13 @@ export function GameApp() {
 }
 
 function buildChallenges(config: TestConfig): Challenge[] {
-  return config.mode === "target-match"
-    ? generateTargetChallenges(config.challengeCount, config.seedPack)
-    : generateDrillChallenges(config.challengeCount, config.seedPack);
+  if (config.mode === "target-match") {
+    return generateTargetChallenges(config.challengeCount, config.seedPack, { difficulty: config.difficulty });
+  }
+  if (config.mode === "coding") {
+    return generatePythonChallenges(config.challengeCount, config.seedPack, config.difficulty);
+  }
+  return generateDrillChallenges(config.challengeCount, config.seedPack);
 }
 
 function initialSelection(challenge: Challenge): SelectionState {

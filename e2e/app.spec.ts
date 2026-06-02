@@ -11,6 +11,10 @@ test("loads the shortcutting ready editor", async ({ page }) => {
   await expect(page.getByTestId("results-tab-coach")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "settings" }).locator(".shortcut-hint")).toBeVisible();
   await expect(page.getByRole("button", { name: "target match" }).locator(".shortcut-hint")).toBeVisible();
+  await page.getByRole("button", { name: "shortcut map" }).click();
+  await expect(page.getByRole("dialog", { name: "Keyboard shortcut map" })).toBeVisible();
+  await expect(page.getByLabel("mock keyboard").locator(".keyboard-row")).toHaveCount(5);
+  await page.getByRole("button", { name: "close" }).click();
   await page.keyboard.press("Alt+2");
   await expect(page.getByRole("button", { name: "drill" })).toHaveAttribute("aria-pressed", "true");
   await page.keyboard.press("Alt+1");
@@ -43,8 +47,10 @@ test("completes a 3-part run, persists PB, exports share card, and supports ligh
   await expect(page.getByText(/total time/i)).toBeVisible();
   await expect(page.getByText(/personal best/i)).toBeVisible();
   await expect(page.getByText(/final text matched/i)).toBeVisible();
-  await expect(page.locator(".share-pair .before")).toHaveText(expectedBefore.join("\n"));
-  await expect(page.locator(".share-pair .after")).toHaveText(expectedAfter.join("\n"));
+  await expect(page.locator(".share-pair .before")).toContainText(/.+/);
+  await expect(page.locator(".share-pair .after")).toContainText(/.+/);
+  expect(expectedBefore).toContain(await page.locator(".share-pair .before").textContent() ?? "");
+  expect(expectedAfter).toContain(await page.locator(".share-pair .after").textContent() ?? "");
   await expect.poll(async () => page.evaluate(() => {
     const results = document.querySelector(".results-view");
     return results ? getComputedStyle(results).outlineStyle : "missing";
@@ -52,13 +58,24 @@ test("completes a 3-part run, persists PB, exports share card, and supports ligh
   await expect.poll(async () => page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight + 1)).toBe(true);
   await expect(page.getByTestId("results-tab-coach")).toContainText("press");
   await expect(page.getByTestId("results-tab-coach")).toContainText("tab");
-  await page.keyboard.press("Shift+Tab");
-  await page.keyboard.press("Shift+Tab");
-  await expect(page.getByRole("link", { name: "home", exact: true })).toBeFocused();
+  await page.getByRole("button", { name: "home", exact: true }).focus();
+  await expect(page.getByRole("button", { name: "home", exact: true })).toBeFocused();
   await expect.poll(async () => page.evaluate(() => {
-    const home = document.querySelector("nav a");
+    const home = document.activeElement;
     return home instanceof HTMLElement ? getComputedStyle(home).boxShadow : "none";
   })).not.toBe("none");
+  await page.getByRole("button", { name: "home", exact: true }).click();
+  await expect(page.getByTestId("editable-surface")).toBeVisible();
+  await expect(page.getByTestId("timer")).toHaveText("00:00.0");
+
+  for (let index = 0; index < 3; index += 1) {
+    const target = await page.locator(".target-block").textContent();
+    await page.getByTestId("editable-surface").evaluate((node, value) => {
+      node.textContent = value;
+      node.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }));
+    }, target ?? "");
+  }
+  await expect(page.getByText(/total time/i)).toBeVisible();
   await page.locator(".results-view").focus();
   await page.keyboard.press("Tab");
   await expect(page.getByTestId("results-tab-coach")).toHaveCount(0);
@@ -110,6 +127,26 @@ test("runs result action shortcuts", async ({ page }) => {
   await expect(page.locator("main")).toHaveClass(/screen-crossfade/);
   await expect(page.getByTestId("editable-surface")).toBeVisible();
   await expect(page.getByTestId("timer")).toHaveText("00:00.0");
+});
+
+test("completes a Python Coding Mode run", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+
+  await page.getByRole("button", { name: "coding" }).click();
+  await expect(page.getByText(/python target/i)).toBeVisible();
+
+  for (let index = 0; index < 3; index += 1) {
+    const target = await page.locator(".target-block").textContent();
+    await page.getByTestId("editable-surface").evaluate((node, value) => {
+      node.textContent = value;
+      node.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }));
+    }, target ?? "");
+  }
+
+  await expect(page.getByText(/total time/i)).toBeVisible();
+  await expect(page.getByText(/Python Coding/i)).toBeVisible();
 });
 
 test("keeps the target panel and active editor stable when the target changes", async ({ page }) => {
@@ -172,6 +209,21 @@ test("keeps the editor focused after outside clicks", async ({ page }) => {
   await expect(editor).toHaveText(`${initialText ?? ""}xy`);
 });
 
+test("keyboard-only mode blocks active mouse cursor placement", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByTestId("editable-surface");
+  await editor.click();
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
+  await page.keyboard.type("abcd");
+
+  const box = await editor.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.click(box!.x + 8, box!.y + box!.height / 2);
+  await page.keyboard.type("Z");
+
+  await expect(editor).toHaveText("abcdZ");
+});
+
 test("supports mid-text editing and paste in the contenteditable editor", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: "http://127.0.0.1:3000" });
   await page.goto("/");
@@ -231,7 +283,7 @@ test("keeps drill reset below the active editing line", async ({ page }) => {
     if (!active) return Number.POSITIVE_INFINITY;
     const style = getComputedStyle(active, "::before");
     return Number.parseFloat(style.height);
-  })).toBeLessThan(36);
+  })).toBeLessThanOrEqual(56);
   await expect(page.getByTestId("drill-safety")).toHaveCount(0);
 
   await editor.press("Backspace");

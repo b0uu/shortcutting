@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { useEffect, useRef } from "react";
-import type { Mode, MousePolicy, PlatformPreference, TestConfig, Theme } from "@/domain/types";
+import type { Difficulty, Mode, MousePolicy, PlatformPreference, TestConfig, Theme, ThemeColors } from "@/domain/types";
 import { ShortcutHint } from "@/components/ui/ShortcutHint";
 
 type SettingsPanelProps = {
@@ -8,9 +8,11 @@ type SettingsPanelProps = {
   config: TestConfig;
   onClose: () => void;
   onChange: (patch: Partial<TestConfig>) => void;
+  onShortcutMap: () => void;
+  onResetLocalData: () => void;
 };
 
-export function SettingsPanel({ open, config, onClose, onChange }: SettingsPanelProps) {
+export function SettingsPanel({ open, config, onClose, onChange, onShortcutMap, onResetLocalData }: SettingsPanelProps) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -87,6 +89,7 @@ export function SettingsPanel({ open, config, onClose, onChange }: SettingsPanel
         <SettingGroup label="mode">
           <Option active={config.mode === "target-match"} onClick={() => onChange({ mode: "target-match" as Mode })}>target match</Option>
           <Option active={config.mode === "drill"} onClick={() => onChange({ mode: "drill" as Mode })}>drill</Option>
+          <Option active={config.mode === "coding"} onClick={() => onChange({ mode: "coding" as Mode })}>coding</Option>
         </SettingGroup>
         <SettingGroup label="parts">
           {[3, 4].map((count) => (
@@ -94,6 +97,11 @@ export function SettingsPanel({ open, config, onClose, onChange }: SettingsPanel
               {count}
             </Option>
           ))}
+        </SettingGroup>
+        <SettingGroup label="difficulty">
+          <Option active={config.difficulty === "standard"} onClick={() => onChange({ difficulty: "standard" as Difficulty })}>standard</Option>
+          <Option active={config.difficulty === "advanced"} onClick={() => onChange({ difficulty: "advanced" as Difficulty })}>advanced</Option>
+          <Option active={config.difficulty === "multiline"} onClick={() => onChange({ difficulty: "multiline" as Difficulty })}>multi-line</Option>
         </SettingGroup>
         <SettingGroup label="input mode">
           <Option active={config.mousePolicy === "keyboard-only"} onClick={() => onChange({ mousePolicy: "keyboard-only" as MousePolicy })}>keyboard only</Option>
@@ -107,10 +115,48 @@ export function SettingsPanel({ open, config, onClose, onChange }: SettingsPanel
         <SettingGroup label="theme">
           <Option active={config.theme === "dark"} onClick={() => onChange({ theme: "dark" as Theme })}>dark</Option>
           <Option active={config.theme === "light"} onClick={() => onChange({ theme: "light" as Theme })}>light</Option>
+          <Option active={config.theme === "custom"} onClick={() => onChange({ theme: "custom" as Theme })}>custom</Option>
         </SettingGroup>
+        {config.theme === "custom" && (
+          <SettingGroup label="custom colors">
+            <div className="color-grid" aria-label="custom theme colors">
+              {themeColorFields.map((field) => (
+                <label key={field.key} className="color-field">
+                  <span>{field.label}</span>
+                  <input
+                    type="color"
+                    value={config.customTheme[field.key]}
+                    aria-label={field.label}
+                    onChange={(event) => onChange({
+                      customTheme: {
+                        ...config.customTheme,
+                        [field.key]: event.currentTarget.value,
+                      },
+                    })}
+                  />
+                </label>
+              ))}
+            </div>
+          </SettingGroup>
+        )}
         <SettingGroup label="sound">
           <Option active={config.soundEnabled} onClick={() => onChange({ soundEnabled: true })}>on</Option>
           <Option active={!config.soundEnabled} onClick={() => onChange({ soundEnabled: false })}>off</Option>
+        </SettingGroup>
+        <SettingGroup label="motion">
+          <Option active={!config.reducedMotion} onClick={() => onChange({ reducedMotion: false })}>standard</Option>
+          <Option active={config.reducedMotion} onClick={() => onChange({ reducedMotion: true })}>reduced</Option>
+        </SettingGroup>
+        <SettingGroup label="coding">
+          <Option active onClick={() => onChange({ codingLanguage: "python" })}>python</Option>
+          <Option active={config.smartPairs} onClick={() => onChange({ smartPairs: true })}>smart pairs on</Option>
+          <Option active={!config.smartPairs} onClick={() => onChange({ smartPairs: false })}>smart pairs off</Option>
+        </SettingGroup>
+        <SettingGroup label="shortcuts">
+          <Option active={false} onClick={onShortcutMap}>open shortcut map</Option>
+        </SettingGroup>
+        <SettingGroup label="local data">
+          <Option active={false} onClick={onResetLocalData}>reset history</Option>
         </SettingGroup>
         <button type="button" className="btn-ghost close-cue" onClick={onClose}>
           <span>close</span>
@@ -120,6 +166,18 @@ export function SettingsPanel({ open, config, onClose, onChange }: SettingsPanel
     </motion.div>
   );
 }
+
+const themeColorFields: Array<{ key: keyof ThemeColors; label: string }> = [
+  { key: "background", label: "background" },
+  { key: "panel", label: "panel" },
+  { key: "card", label: "card" },
+  { key: "text", label: "text" },
+  { key: "mutedText", label: "muted text" },
+  { key: "accent", label: "accent" },
+  { key: "success", label: "success" },
+  { key: "error", label: "error" },
+  { key: "focus", label: "focus" },
+];
 
 function SettingGroup({ label, children }: { label: string; children: React.ReactNode }) {
   return (

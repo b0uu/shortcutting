@@ -162,6 +162,53 @@ describe("GameApp", () => {
     expect(settingsButton).toHaveFocus();
   });
 
+  it("keeps run options collapsed until opened from the mode bar", () => {
+    render(<GameApp />);
+
+    const toggle = screen.getByRole("button", { name: /3 parts.*standard.*keys only/i });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByLabelText("difficulty")).not.toBeInTheDocument();
+
+    fireEvent.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByLabelText("difficulty")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "multi-line" })).toBeInTheDocument();
+  });
+
+  it("applies and persists custom theme colors from settings", () => {
+    render(<GameApp />);
+    fireEvent.click(screen.getByRole("button", { name: "settings" }));
+    fireEvent.click(screen.getByRole("button", { name: "custom" }));
+    fireEvent.change(screen.getByLabelText("accent"), { target: { value: "#336699" } });
+
+    const shell = document.querySelector<HTMLElement>(".app-shell");
+    expect(shell).toHaveAttribute("data-theme", "custom");
+    expect(shell?.style.getPropertyValue("--accent")).toBe("#336699");
+
+    const stored = JSON.parse(window.localStorage.getItem("shortcutting:settings") ?? "{}");
+    expect(stored.theme).toBe("custom");
+    expect(stored.customTheme.accent).toBe("#336699");
+  });
+
+  it("persists detailed settings and resets local history with confirmation", () => {
+    window.localStorage.setItem("shortcutting:results", JSON.stringify([{ id: "old" }]));
+    window.localStorage.setItem("shortcutting:personal-bests", JSON.stringify({ best: { id: "old" } }));
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(<GameApp />);
+    fireEvent.click(screen.getByRole("button", { name: "settings" }));
+    fireEvent.click(screen.getByRole("button", { name: "reduced" }));
+    fireEvent.click(screen.getByRole("button", { name: "smart pairs off" }));
+    fireEvent.click(screen.getByRole("button", { name: "reset history" }));
+
+    const stored = JSON.parse(window.localStorage.getItem("shortcutting:settings") ?? "{}");
+    expect(stored.reducedMotion).toBe(true);
+    expect(stored.smartPairs).toBe(false);
+    expect(window.localStorage.getItem("shortcutting:results")).toBeNull();
+    expect(window.localStorage.getItem("shortcutting:personal-bests")).toBeNull();
+  });
+
   it("completes a configured 4-part run", async () => {
     render(<GameApp />);
     fireEvent.click(screen.getByRole("button", { name: "settings" }));
@@ -173,6 +220,24 @@ describe("GameApp", () => {
 
     expect(screen.getByText(/total time/i)).toBeInTheDocument();
     expect(screen.getByText(/total time: 4-part challenge/i)).toBeInTheDocument();
+  });
+
+  it("uses selected multi-line difficulty and validates exact newlines", async () => {
+    render(<GameApp />);
+    fireEvent.click(screen.getByRole("button", { name: "settings" }));
+    fireEvent.click(screen.getByRole("button", { name: "multi-line" }));
+    fireEvent.keyDown(screen.getByRole("dialog", { name: /settings/i }), { key: "Escape" });
+    act(() => vi.advanceTimersByTime(0));
+
+    expect(activeTargetText()).toContain("\n");
+    completeActiveText(activeTargetText().replace("\n", " "));
+    await flushRunUpdate();
+    expect(screen.getByLabelText(/1 of 3 parts/i)).toBeInTheDocument();
+
+    completeActiveText(activeTargetText());
+    await flushRunUpdate();
+    expect(screen.getByTestId("locked-segment").textContent).toContain("\n");
+    expect(screen.getByLabelText(/2 of 3 parts/i)).toBeInTheDocument();
   });
 
   it("blocks active-run mouse placement in keyboard-only mode", () => {
@@ -233,6 +298,35 @@ describe("GameApp", () => {
 
     expect(screen.getByTestId("editable-surface")).toHaveTextContent("Keep the final draft");
     expect(screen.getByTestId("drill-safety")).toBeInTheDocument();
+  });
+
+  it("supports Python Coding Mode smart pairs, indentation, and exact completion", async () => {
+    render(<GameApp />);
+    fireEvent.click(screen.getByRole("button", { name: /coding/i }));
+    expect(screen.getByText(/python target/i)).toBeInTheDocument();
+
+    const editor = screen.getByTestId("editable-surface");
+    editor.textContent = "";
+    setSelectionRange(editor, 0);
+    fireEvent.input(editor);
+    fireEvent.keyDown(editor, { key: "(", code: "Digit9" });
+    expect(editor.textContent).toBe("()");
+
+    fireEvent.keyDown(editor, { key: "Backspace", code: "Backspace" });
+    expect(editor.textContent).toBe("");
+
+    editor.textContent = "  value = 1";
+    setSelectionRange(editor, "  value = 1".length);
+    fireEvent.input(editor);
+    fireEvent.keyDown(editor, { key: "Enter", code: "Enter" });
+    expect(editor.textContent).toBe("  value = 1\n  ");
+
+    fireEvent.keyDown(editor, { key: "Tab", code: "Tab" });
+    expect(editor.textContent).toBe("  value = 1\n    ");
+
+    completeActiveText(activeTargetText());
+    await flushRunUpdate();
+    expect(screen.getByLabelText(/2 of 3 parts/i)).toBeInTheDocument();
   });
 });
 

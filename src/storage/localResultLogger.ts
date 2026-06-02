@@ -1,6 +1,6 @@
 import { personalBestKey } from "@/domain/results";
 import type { TestResult } from "@/domain/types";
-import type { ResultLogger } from "./resultLogger";
+import type { ResultHistoryFilter, ResultLogger } from "./resultLogger";
 
 const resultsKey = "shortcutting:results";
 const bestsKey = "shortcutting:personal-bests";
@@ -23,6 +23,15 @@ export class LocalResultLogger implements ResultLogger {
 
   async getResults(): Promise<TestResult[]> {
     return readJson<TestResult[]>(resultsKey, []);
+  }
+
+  async getHistory(filter: ResultHistoryFilter = {}): Promise<TestResult[]> {
+    const results = await this.getResults();
+    return results.filter((result) => {
+      const modeMatches = !filter.mode || filter.mode === "all" || result.config.mode === filter.mode;
+      const difficultyMatches = !filter.difficulty || filter.difficulty === "all" || result.config.difficulty === filter.difficulty;
+      return modeMatches && difficultyMatches;
+    });
   }
 
   async getPersonalBests(): Promise<Record<string, TestResult>> {

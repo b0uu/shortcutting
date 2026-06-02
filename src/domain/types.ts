@@ -1,9 +1,21 @@
-export type Mode = "target-match" | "drill";
-export type Difficulty = "standard";
+export type Mode = "target-match" | "drill" | "coding";
+export type Difficulty = "standard" | "advanced" | "multiline";
 export type Platform = "mac" | "windows-linux";
 export type PlatformPreference = "auto" | Platform;
 export type MousePolicy = "keyboard-only" | "mouse-allowed";
-export type Theme = "dark" | "light";
+export type Theme = "dark" | "light" | "custom";
+
+export type ThemeColors = {
+  background: string;
+  panel: string;
+  card: string;
+  text: string;
+  mutedText: string;
+  accent: string;
+  success: string;
+  error: string;
+  focus: string;
+};
 
 export type SkillTag =
   | "word-navigation"
@@ -20,6 +32,21 @@ export type SkillTag =
   | "newline-correction"
   | "cut-paste-reorder"
   | "mouse-free-editing";
+
+export type SkillPack =
+  | "word-movement"
+  | "deletion-cleanup"
+  | "punctuation-casing"
+  | "line-reshaping"
+  | "code-cleanup"
+  | "code-refactor-micro-edits"
+  | "indentation"
+  | "rename"
+  | "boolean-cleanup"
+  | "argument-cleanup"
+  | "string-cleanup"
+  | "simple-refactor"
+  | "selection-practice";
 
 export type ChallengeErrorType =
   | "extra-word"
@@ -71,6 +98,7 @@ export type Challenge = {
   targetText: string;
   editableText: string;
   errors: ChallengeError[];
+  skillPacks: SkillPack[];
   difficulty: Difficulty;
   estimatedCorrections: number;
   drill?: DrillDefinition;
@@ -85,6 +113,10 @@ export type TestConfig = {
   difficulty: Difficulty;
   soundEnabled: boolean;
   theme: Theme;
+  customTheme: ThemeColors;
+  codingLanguage: "python";
+  smartPairs: boolean;
+  reducedMotion: boolean;
   seedPack: string;
 };
 
@@ -122,12 +154,20 @@ export type ChallengeResult = {
   targetText: string;
   finalText: string;
   elapsedMs: number;
+  skillTags: SkillTag[];
+  estimatedCorrections: number;
   hintsUsed: number;
   mouseActions: number;
   keystrokes: number;
   clipboardActions: number;
   undoCount: number;
   redoCount: number;
+};
+
+export type SkillCategorySummary = {
+  tag: SkillTag;
+  count: number;
+  averageElapsedMs: number;
 };
 
 export type TestResult = {
@@ -143,6 +183,11 @@ export type TestResult = {
   clipboardActions: number;
   undoCount: number;
   redoCount: number;
+  editsPerMinute: number;
+  estimatedCorrectionCount: number;
+  skillTagSummary: Partial<Record<SkillTag, number>>;
+  bestSkillCategory: SkillCategorySummary | null;
+  slowestSkillCategory: SkillCategorySummary | null;
   isPersonalBest: boolean;
   shareChallengeId: string;
 };

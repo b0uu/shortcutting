@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { generateTargetChallenges } from "./challenges";
+import { filterTargetTemplates, generateTargetChallenges } from "./challenges";
 
 describe("generateTargetChallenges", () => {
   it("is deterministic for the same seed", () => {
@@ -12,5 +12,23 @@ describe("generateTargetChallenges", () => {
     const [challenge] = generateTargetChallenges(1, "standard-v1");
     expect(challenge.errors.length).toBeGreaterThan(0);
     expect(challenge.errors[0].skillTags.length).toBeGreaterThan(0);
+    expect(challenge.skillPacks.length).toBeGreaterThan(0);
+    expect(challenge.difficulty).toBe("standard");
+  });
+
+  it("filters deterministic pools by difficulty and skill pack", () => {
+    const advanced = generateTargetChallenges(2, "standard-v1", { difficulty: "advanced" });
+    expect(advanced.every((challenge) => challenge.difficulty === "advanced")).toBe(true);
+
+    const punctuationTemplates = filterTargetTemplates({ skillPack: "punctuation-casing" });
+    expect(punctuationTemplates.length).toBeGreaterThan(0);
+    expect(punctuationTemplates.every((template) => template.skillPacks.includes("punctuation-casing"))).toBe(true);
+  });
+
+  it("generates multi-line challenges with meaningful newlines", () => {
+    const [challenge] = generateTargetChallenges(1, "standard-v1", { difficulty: "multiline" });
+    expect(challenge.targetText).toContain("\n");
+    expect(challenge.editableText).toContain("\n");
+    expect(challenge.difficulty).toBe("multiline");
   });
 });

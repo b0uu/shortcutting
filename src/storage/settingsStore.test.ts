@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { darkThemeColors } from "@/domain/themes";
 import type { TestConfig } from "@/domain/types";
 import { loadSettings, saveSettings, sanitizeConfig, settingsKey } from "./settingsStore";
 
@@ -11,6 +12,10 @@ const defaultConfig: TestConfig = {
   difficulty: "standard",
   soundEnabled: true,
   theme: "dark",
+  customTheme: darkThemeColors,
+  codingLanguage: "python",
+  smartPairs: true,
+  reducedMotion: false,
   seedPack: "standard-v1",
 };
 
@@ -27,8 +32,12 @@ describe("settingsStore", () => {
       platformPreference: "windows-linux",
       platform: "windows-linux",
       mousePolicy: "mouse-allowed",
+      difficulty: "advanced",
       soundEnabled: false,
-      theme: "light",
+      theme: "custom",
+      customTheme: { ...darkThemeColors, background: "#112233", accent: "#445566" },
+      smartPairs: false,
+      reducedMotion: true,
     };
 
     saveSettings(stored);
@@ -38,8 +47,12 @@ describe("settingsStore", () => {
       platformPreference: "windows-linux",
       platform: "windows-linux",
       mousePolicy: "mouse-allowed",
+      difficulty: "advanced",
       soundEnabled: false,
-      theme: "light",
+      theme: "custom",
+      customTheme: { ...darkThemeColors, background: "#112233", accent: "#445566" },
+      smartPairs: false,
+      reducedMotion: true,
     });
   });
 

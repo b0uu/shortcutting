@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { darkThemeColors } from "@/domain/themes";
 import { LocalResultLogger } from "./localResultLogger";
 import type { TestResult } from "@/domain/types";
 
@@ -13,6 +14,10 @@ const result: TestResult = {
     difficulty: "standard",
     soundEnabled: true,
     theme: "dark",
+    customTheme: darkThemeColors,
+    codingLanguage: "python",
+    smartPairs: true,
+    reducedMotion: false,
     seedPack: "standard-v1",
   },
   startedAt: "2026-06-01T00:00:00.000Z",
@@ -26,6 +31,8 @@ const result: TestResult = {
       targetText: "b",
       finalText: "b",
       elapsedMs: 1000,
+      skillTags: ["replacement"],
+      estimatedCorrections: 1,
       hintsUsed: 0,
       mouseActions: 0,
       keystrokes: 1,
@@ -40,6 +47,11 @@ const result: TestResult = {
   clipboardActions: 0,
   undoCount: 0,
   redoCount: 0,
+  editsPerMinute: 60,
+  estimatedCorrectionCount: 1,
+  skillTagSummary: { replacement: 1 },
+  bestSkillCategory: { tag: "replacement", count: 1, averageElapsedMs: 1000 },
+  slowestSkillCategory: { tag: "replacement", count: 1, averageElapsedMs: 1000 },
   isPersonalBest: true,
   shareChallengeId: "c1",
 };
@@ -54,6 +66,20 @@ describe("LocalResultLogger", () => {
     await logger.saveResult(result);
     expect(await logger.getResults()).toHaveLength(1);
     expect(Object.keys(await logger.getPersonalBests())).toHaveLength(1);
+  });
+
+  it("filters local history by mode and difficulty", async () => {
+    const logger = new LocalResultLogger();
+    await logger.saveResult(result);
+    await logger.saveResult({
+      ...result,
+      id: "advanced",
+      config: { ...result.config, difficulty: "standard", mode: "drill" },
+    });
+
+    expect(await logger.getHistory({ mode: "target-match" })).toHaveLength(1);
+    expect(await logger.getHistory({ mode: "drill" })).toHaveLength(1);
+    expect(await logger.getHistory({ difficulty: "standard" })).toHaveLength(2);
   });
 
   it("does not replace a faster personal best with a slower result", async () => {
@@ -85,13 +111,20 @@ describe("LocalResultLogger", () => {
       config: { ...result.config, challengeCount: 4 },
       elapsedMs: 4000,
     });
+    await logger.saveResult({
+      ...result,
+      id: "advanced",
+      config: { ...result.config, difficulty: "advanced" },
+      elapsedMs: 5000,
+    });
 
     const bests = await logger.getPersonalBests();
-    expect(Object.keys(bests)).toHaveLength(4);
+    expect(Object.keys(bests)).toHaveLength(5);
     expect(bests["target-match|3|mac|keyboard-only|standard|standard-v1"].elapsedMs).toBe(1000);
     expect(bests["target-match|3|mac|mouse-allowed|standard|standard-v1"].elapsedMs).toBe(2000);
     expect(bests["drill|3|mac|keyboard-only|standard|standard-v1"].elapsedMs).toBe(3000);
     expect(bests["target-match|4|mac|keyboard-only|standard|standard-v1"].elapsedMs).toBe(4000);
+    expect(bests["target-match|3|mac|keyboard-only|advanced|standard-v1"].elapsedMs).toBe(5000);
   });
 
   it("replaces a personal best with a faster result and caps stored results", async () => {

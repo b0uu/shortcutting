@@ -1,25 +1,49 @@
-import Link from "next/link";
 import type { RefObject } from "react";
 import { ShortcutHint } from "@/components/ui/ShortcutHint";
+import type { Platform } from "@/domain/types";
 
 type HeaderProps = {
+  platform: Platform;
+  onHome: () => void;
+  onHistory: () => void;
   onSettings: () => void;
+  historyDisabled: boolean;
   settingsDisabled: boolean;
   settingsButtonRef: RefObject<HTMLButtonElement | null>;
 };
 
-export function Header({ onSettings, settingsDisabled, settingsButtonRef }: HeaderProps) {
+export function Header({
+  platform,
+  onHome,
+  onHistory,
+  onSettings,
+  historyDisabled,
+  settingsDisabled,
+  settingsButtonRef,
+}: HeaderProps) {
+  const modifier = platform === "mac" ? "⌥" : "alt";
+
   return (
     <header className="app-header">
-      <Link className="logo" href="/" aria-label="shortcutting home">
+      <button type="button" className="logo" aria-label="shortcutting home" onClick={onHome}>
         <span className="logo-mark">⌥</span>
         <span>shortcutting</span>
-      </Link>
+      </button>
       <nav aria-label="Primary">
-        <Link href="/">
+        <button type="button" onClick={onHome}>
           <span>home</span>
-          <ShortcutHint keys={["⌥", "H"]} />
-        </Link>
+          <ShortcutHint keys={[modifier, "H"]} />
+        </button>
+        <button
+          type="button"
+          onClick={onHistory}
+          disabled={historyDisabled}
+          aria-disabled={historyDisabled}
+          tabIndex={-1}
+        >
+          <span>history</span>
+          <ShortcutHint keys={[modifier, "Y"]} />
+        </button>
         <button
           ref={settingsButtonRef}
           type="button"

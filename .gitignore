@@ -21,6 +21,8 @@ AGENTS.md
 docs/codex-workflow.md
 docs/goal-mode-prompt.md
 docs/implementation-guidance.md
+docs/overnight-goal-prompt.md
+docs/overnight-spec.md
 docs/plan-mode-prompt.md
 docs/testing-and-review.md
 extra-agent-files/

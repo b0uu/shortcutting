@@ -1,5 +1,6 @@
 import type { Platform, PlatformPreference, TestConfig } from "@/domain/types";
 import { resolvePlatform } from "@/domain/platform";
+import { sanitizeThemeColors } from "@/domain/themes";
 
 export const settingsKey = "shortcutting:settings";
 
@@ -31,14 +32,18 @@ export function sanitizeConfig(
   );
 
   return {
-    mode: oneOf(input.mode, ["target-match", "drill"], fallback.mode),
+    mode: oneOf(input.mode, ["target-match", "drill", "coding"], fallback.mode),
     challengeCount: oneOf(input.challengeCount, [3, 4], fallback.challengeCount),
     platformPreference,
     platform: resolvePlatform(platformPreference, detectedPlatform),
     mousePolicy: oneOf(input.mousePolicy, ["keyboard-only", "mouse-allowed"], fallback.mousePolicy),
-    difficulty: "standard",
+    difficulty: oneOf(input.difficulty, ["standard", "advanced", "multiline"], fallback.difficulty),
     soundEnabled: typeof input.soundEnabled === "boolean" ? input.soundEnabled : fallback.soundEnabled,
-    theme: oneOf(input.theme, ["dark", "light"], fallback.theme),
+    theme: oneOf(input.theme, ["dark", "light", "custom"], fallback.theme),
+    customTheme: sanitizeThemeColors(input.customTheme, fallback.customTheme),
+    codingLanguage: "python",
+    smartPairs: typeof input.smartPairs === "boolean" ? input.smartPairs : fallback.smartPairs,
+    reducedMotion: typeof input.reducedMotion === "boolean" ? input.reducedMotion : fallback.reducedMotion,
     seedPack: typeof input.seedPack === "string" && input.seedPack ? input.seedPack : fallback.seedPack,
   };
 }

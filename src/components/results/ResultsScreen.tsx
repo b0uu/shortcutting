@@ -4,22 +4,25 @@ import { motion } from "framer-motion";
 import html2canvas from "html2canvas";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatElapsed } from "@/domain/timer";
-import type { TestResult } from "@/domain/types";
+import { themeCssVariables } from "@/domain/themes";
+import type { TestResult, ThemeColors } from "@/domain/types";
 import { ShortcutHint } from "@/components/ui/ShortcutHint";
 import { ShareCard } from "./ShareCard";
 
 type ResultsScreenProps = {
   result: TestResult;
+  themeColors: ThemeColors;
   onPlayAgain: () => void;
 };
 
-export function ResultsScreen({ result, onPlayAgain }: ResultsScreenProps) {
+export function ResultsScreen({ result, themeColors, onPlayAgain }: ResultsScreenProps) {
   const sectionRef = useRef<HTMLElement | null>(null);
   const shareRef = useRef<HTMLDivElement | null>(null);
   const tabAnimationTimeout = useRef<number | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [tabCoachVisible, setTabCoachVisible] = useState(true);
+  const modifier = result.config.platform === "mac" ? "⌥" : "alt";
 
   useEffect(() => {
     sectionRef.current?.focus();
@@ -66,12 +69,17 @@ export function ResultsScreen({ result, onPlayAgain }: ResultsScreenProps) {
     setExportError(null);
     try {
       const canvas = await html2canvas(shareRef.current, {
-        backgroundColor: "#1c1a17",
+        backgroundColor: themeColors.background,
         scale: 2,
         width: 640,
         height: 320,
         onclone: (doc) => {
-          doc.querySelector(".share-card")?.classList.add("share-card-export-dark");
+          const card = doc.querySelector<HTMLElement>(".share-card");
+          if (!card) return;
+          card.classList.add("share-card-export");
+          for (const [key, value] of Object.entries(themeCssVariables(themeColors))) {
+            card.style.setProperty(key, value);
+          }
         },
       });
       const link = document.createElement("a");
@@ -83,7 +91,7 @@ export function ResultsScreen({ result, onPlayAgain }: ResultsScreenProps) {
     } finally {
       setExporting(false);
     }
-  }, []);
+  }, [themeColors]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -131,17 +139,25 @@ export function ResultsScreen({ result, onPlayAgain }: ResultsScreenProps) {
           <Stat value={result.totalKeystrokes} label="keystrokes" />
           <Stat value={result.hintsUsed} label="hints used" />
           <Stat value={result.mouseActions} label="mouse actions" />
+          <Stat value={result.clipboardActions} label="clipboard" />
+          <Stat value={result.undoCount + result.redoCount} label="undo / redo" />
+          <Stat value={result.editsPerMinute} label="edits / min" />
         </div>
       </div>
-      <ShareCard ref={shareRef} result={result} />
+      <div className="results-insights" aria-label="skill summary">
+        <span>{result.estimatedCorrectionCount} estimated corrections</span>
+        <span>best: {formatSkill(result.bestSkillCategory?.tag)}</span>
+        <span>slowest: {formatSkill(result.slowestSkillCategory?.tag)}</span>
+      </div>
+      <ShareCard ref={shareRef} result={result} themeColors={themeColors} />
       <div className="results-actions">
         <button type="button" className="btn-primary" onClick={downloadCard} disabled={exporting} aria-busy={exporting}>
           <span>{exporting ? "exporting" : "download card"}</span>
-          <ShortcutHint keys={["⌥", "D"]} />
+          <ShortcutHint keys={[modifier, "D"]} />
         </button>
         <button type="button" className="btn-ghost" onClick={requestPlayAgain}>
           <span>play again</span>
-          <ShortcutHint keys={["⌥", "P"]} />
+          <ShortcutHint keys={[modifier, "P"]} />
         </button>
       </div>
       <p className="export-status" aria-live="polite">{exportError}</p>
@@ -165,4 +181,8 @@ function Stat({ value, label }: { value: number; label: string }) {
       <span>{label}</span>
     </motion.div>
   );
+}
+
+function formatSkill(tag: string | undefined): string {
+  return tag ? tag.replaceAll("-", " ") : "none yet";
 }
