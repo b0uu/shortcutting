@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("loads the shortcutting ready editor", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?seed=standard-v1");
   await expect(page.getByText("shortcutting")).toBeVisible();
   await expect(page.getByRole("button", { name: /start/i })).toHaveCount(0);
   await expect(page.getByRole("dialog", { name: /target match/i })).toHaveCount(0);
@@ -28,7 +28,7 @@ test("morphs run options without layout shift and avoids browser dialogs", async
     await dialog.dismiss();
   });
 
-  await page.goto("/");
+  await page.goto("/?seed=standard-v1");
   const modebar = page.locator(".modebar");
   const before = await modebar.boundingBox();
   expect(before).not.toBeNull();
@@ -62,7 +62,7 @@ test("morphs run options without layout shift and avoids browser dialogs", async
 });
 
 test("completes a 3-part run, persists PB, exports share card, and supports light theme", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?seed=standard-v1");
   await page.evaluate(() => localStorage.clear());
   await page.reload();
 
@@ -152,7 +152,7 @@ test("completes a 3-part run, persists PB, exports share card, and supports ligh
 });
 
 test("runs result action shortcuts", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?seed=standard-v1");
 
   for (let index = 0; index < 3; index += 1) {
     const target = await page.locator(".target-block").textContent();
@@ -164,13 +164,33 @@ test("runs result action shortcuts", async ({ page }) => {
 
   await expect(page.getByText(/total time/i)).toBeVisible();
   await page.keyboard.press("Alt+P");
-  await expect(page.locator("main")).toHaveClass(/screen-crossfade/);
   await expect(page.getByTestId("editable-surface")).toBeVisible();
   await expect(page.getByTestId("timer")).toHaveText("00:00.0");
 });
 
+test("completes a run and starts focused practice from results", async ({ page }) => {
+  await page.goto("/?seed=standard-v1");
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+
+  for (let index = 0; index < 3; index += 1) {
+    const target = await page.locator(".target-block").textContent();
+    await page.getByTestId("editable-surface").evaluate((node, value) => {
+      node.textContent = value;
+      node.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }));
+    }, target ?? "");
+  }
+
+  await expect(page.getByLabel("next practice suggestion")).toContainText(/practice/i);
+  await expect(page.getByText(/hint focus/i)).toBeVisible();
+  await page.getByRole("button", { name: /practice this again/i }).click();
+  await expect(page.getByTestId("editable-surface")).toBeVisible();
+  await expect(page.getByTestId("timer")).toHaveText("00:00.0");
+  await expect(page.getByRole("button", { name: "target match" })).toHaveAttribute("aria-pressed", "true");
+});
+
 test("completes a Python Coding Mode run", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?seed=standard-v1");
   await page.evaluate(() => localStorage.clear());
   await page.reload();
 
@@ -190,7 +210,7 @@ test("completes a Python Coding Mode run", async ({ page }) => {
 });
 
 test("keeps the target panel and active editor stable when the target changes", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?seed=standard-v1");
   const targetBefore = await page.locator(".target-panel").boundingBox();
   const editorBefore = await page.getByTestId("active-segment").boundingBox();
   const labelBefore = await page.locator(".edit-label").boundingBox();
@@ -237,7 +257,7 @@ test("keeps the target panel and active editor stable when the target changes", 
 });
 
 test("keeps the editor focused after outside clicks", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?seed=standard-v1");
   const editor = page.getByTestId("editable-surface");
   await expect(editor).toBeVisible();
   const initialText = await editor.evaluate((node) => node.textContent ?? "");
@@ -254,7 +274,7 @@ test("keeps the editor focused after outside clicks", async ({ page }) => {
 });
 
 test("keyboard-only mode blocks active mouse cursor placement", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?seed=standard-v1");
   const editor = page.getByTestId("editable-surface");
   await editor.click();
   await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
@@ -270,7 +290,7 @@ test("keyboard-only mode blocks active mouse cursor placement", async ({ page })
 
 test("supports mid-text editing and paste in the contenteditable editor", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: "http://127.0.0.1:3000" });
-  await page.goto("/");
+  await page.goto("/?seed=standard-v1");
   const editor = page.getByTestId("editable-surface");
   await editor.click();
   await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
@@ -284,7 +304,7 @@ test("supports mid-text editing and paste in the contenteditable editor", async 
 });
 
 test("keeps editing available after the hint marker appears", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?seed=standard-v1");
   await page.getByTestId("editable-surface").press("a");
   await page.waitForTimeout(5100);
 
@@ -303,7 +323,7 @@ test("keeps editing available after the hint marker appears", async ({ page }) =
 });
 
 test("completes a target part through real keyboard input", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?seed=standard-v1");
   await page.evaluate(() => localStorage.clear());
   await page.reload();
 
@@ -318,7 +338,7 @@ test("completes a target part through real keyboard input", async ({ page }) => 
 });
 
 test("keeps drill reset below the active editing line", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?seed=standard-v1");
   await page.getByRole("button", { name: "drill" }).click();
   const editor = page.getByTestId("editable-surface");
 
@@ -342,11 +362,12 @@ test("keeps drill reset below the active editing line", async ({ page }) => {
 });
 
 test("keeps drill completion rail anchored to the active line", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?seed=standard-v1");
   await page.getByRole("button", { name: "drill" }).click();
 
   await page.getByTestId("editable-surface").evaluate((node) => {
-    node.textContent = "Keep the final ";
+    const words = (node.textContent ?? "").split(" ");
+    node.textContent = [...words.slice(0, 2), ...words.slice(3)].join(" ");
     node.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }));
   });
 

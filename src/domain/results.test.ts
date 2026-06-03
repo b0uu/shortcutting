@@ -27,6 +27,7 @@ const baseResult: ChallengeResult = {
   finalText: "abc",
   elapsedMs: 100,
   skillTags: ["replacement"],
+  skillPacks: ["selection-practice"],
   estimatedCorrections: 1,
   hintsUsed: 0,
   mouseActions: 0,
@@ -78,8 +79,10 @@ describe("results", () => {
     expect(summary.editsPerMinute).toBe(120);
     expect(summary.estimatedCorrectionCount).toBe(2);
     expect(summary.skillTagSummary.replacement).toBe(2);
+    expect(summary.skillPackSummary["selection-practice"]).toBe(2);
     expect(summary.bestSkillCategory?.tag).toBe("replacement");
     expect(summary.slowestSkillCategory?.tag).toBe("replacement");
+    expect(summary.nextPracticeSuggestion.skillTag).toBe("replacement");
   });
 
   it("identifies faster and slower skill categories", () => {
@@ -98,5 +101,25 @@ describe("results", () => {
 
     expect(summary.bestSkillCategory?.tag).toBe("punctuation-insertion");
     expect(summary.slowestSkillCategory?.tag).toBe("word-deletion");
+  });
+
+  it("summarizes hinted skills and suggests focused practice", () => {
+    const summary = summarizeResult(
+      "r1",
+      config,
+      "2026-06-01T00:00:00.000Z",
+      "2026-06-01T00:01:00.000Z",
+      10000,
+      [
+        { ...baseResult, skillTags: ["word-deletion"], skillPacks: ["deletion-cleanup"], hintsUsed: 2, elapsedMs: 2000 },
+        { ...baseResult, challengeId: "b", skillTags: ["punctuation-insertion"], skillPacks: ["punctuation-casing"], hintsUsed: 0, elapsedMs: 9000 },
+      ],
+      false,
+    );
+
+    expect(summary.hintSkillSummary["word-deletion"]).toBe(2);
+    expect(summary.nextPracticeSuggestion.skillTag).toBe("word-deletion");
+    expect(summary.nextPracticeSuggestion.skillPack).toBe("deletion-cleanup");
+    expect(summary.nextPracticeSuggestion.label).toContain("word deletion");
   });
 });

@@ -121,6 +121,10 @@ export function EditableSurface({
   }, [active, focusLocked]);
 
   const diffTokens = showDiff ? buildDiffTokens(currentText, targetText) : [];
+  const deletionHintTokens = !showDiff && active
+    ? buildDiffTokens(currentText, targetText).filter((token) => token.status !== "missing")
+    : [];
+  const showDeletionHints = deletionHintTokens.some((token) => token.status === "extra");
   const describedBy = showDiff ? "target-text hint-text" : "target-text";
   const syntaxTokens = challenge.mode === "coding" ? buildPythonSyntaxTokens(currentText) : [];
   const showSyntax = syntaxTokens.length > 0 && !showDiff;
@@ -137,6 +141,15 @@ export function EditableSurface({
         <div className="syntax-overlay" aria-hidden="true">
           {syntaxTokens.map((token) => (
             <span key={token.id} className={`syntax-${token.type}`}>{token.text}</span>
+          ))}
+        </div>
+      )}
+      {showDeletionHints && (
+        <div className="deletion-hint-overlay" aria-hidden="true" data-testid="deletion-hint-overlay">
+          {deletionHintTokens.map((token) => (
+            <span key={token.id} className={token.status === "extra" ? "delete-extra" : ""}>
+              {token.value}
+            </span>
           ))}
         </div>
       )}
@@ -252,11 +265,21 @@ function handleSmartKeyDown(
   const selection = getSelectionRange(element);
   const text = getEditablePlainText(element);
 
-  const pair = pairForKey(event.key);
-  if (pair && selection.start === selection.end) {
+  if (selection.start === selection.end && isClosingPairKey(event.key, text[selection.start])) {
     event.preventDefault();
-    const nextText = spliceText(text, selection, pair.open + pair.close);
     const nextSelection = { start: selection.start + 1, end: selection.start + 1 };
+    syncSmartText(element, text, nextSelection, onInputText);
+    return;
+  }
+
+  const pair = pairForKey(event.key);
+  if (pair) {
+    event.preventDefault();
+    const selectedText = text.slice(selection.start, selection.end);
+    const nextText = spliceText(text, selection, pair.open + selectedText + pair.close);
+    const nextSelection = selection.start === selection.end
+      ? { start: selection.start + 1, end: selection.start + 1 }
+      : { start: selection.start + 1, end: selection.start + 1 + selectedText.length };
     syncSmartText(element, nextText, nextSelection, onInputText);
     return;
   }
@@ -286,9 +309,14 @@ function handleSmartKeyDown(
   if (event.key === "Tab") {
     event.preventDefault();
     const insertion = "  ";
-    const nextText = spliceText(text, selection, insertion);
-    const nextSelection = { start: selection.start + insertion.length, end: selection.start + insertion.length };
-    syncSmartText(element, nextText, nextSelection, onInputText);
+    if (selection.start === selection.end) {
+      const nextText = spliceText(text, selection, insertion);
+      const nextSelection = { start: selection.start + insertion.length, end: selection.start + insertion.length };
+      syncSmartText(element, nextText, nextSelection, onInputText);
+    } else {
+      const indented = indentSelectedLines(text, selection, insertion);
+      syncSmartText(element, indented.text, indented.selection, onInputText);
+    }
   }
 }
 
@@ -309,6 +337,14 @@ function isEmptyPair(before: string | undefined, after: string | undefined): boo
     || (before === "'" && after === "'");
 }
 
+function isClosingPairKey(key: string, nextCharacter: string | undefined): boolean {
+  return (key === ")" && nextCharacter === ")")
+    || (key === "]" && nextCharacter === "]")
+    || (key === "}" && nextCharacter === "}")
+    || (key === "\"" && nextCharacter === "\"")
+    || (key === "'" && nextCharacter === "'");
+}
+
 function spliceText(text: string, selection: SelectionState, insertion: string): string {
   return `${text.slice(0, selection.start)}${insertion}${text.slice(selection.end)}`;
 }
@@ -317,6 +353,25 @@ function currentLineIndentation(text: string, position: number): string {
   const lineStart = text.lastIndexOf("\n", position - 1) + 1;
   const line = text.slice(lineStart, position);
   return line.match(/^\s*/)?.[0] ?? "";
+}
+
+function indentSelectedLines(text: string, selection: SelectionState, insertion: string): { text: string; selection: SelectionState } {
+  const lineStart = text.lastIndexOf("\n", selection.start - 1) + 1;
+  const selectedEnd = selection.end;
+  const selectionEndsAtLineStart = selectedEnd > selection.start && text[selectedEnd - 1] === "\n";
+  const lineEnd = selectionEndsAtLineStart ? selectedEnd - 1 : selectedEnd;
+  const selected = text.slice(lineStart, lineEnd);
+  const lineCount = selected.length === 0 ? 1 : selected.split("\n").length;
+  const indented = selected.split("\n").map((line) => `${insertion}${line}`).join("\n");
+  const nextText = `${text.slice(0, lineStart)}${indented}${text.slice(lineEnd)}`;
+  const startShift = selection.start === lineStart ? insertion.length : 0;
+  return {
+    text: nextText,
+    selection: {
+      start: selection.start + startShift,
+      end: selection.end + (lineCount * insertion.length),
+    },
+  };
 }
 
 function syncSmartText(

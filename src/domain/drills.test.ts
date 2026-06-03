@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { generateDrillChallenges, hintForDrill } from "./drills";
+import { filterDrillDefinitions, generateDrillChallenges, hintForDrill } from "./drills";
 import { validateChallenge } from "./validation";
 
 describe("drills", () => {
@@ -19,6 +19,8 @@ describe("drills", () => {
     expect(drills.every((challenge) => challenge.intendedShortcutPath.length > 0)).toBe(true);
     expect(drills.every((challenge) => challenge.attentionRanges.length > 0)).toBe(true);
     expect(drills.every((challenge) => challenge.skillPacks.length > 0)).toBe(true);
+    expect(drills.every((challenge) => challenge.estimatedCorrections > 0)).toBe(true);
+    expect(drills.every((challenge) => challenge.targetText.split(" ").length >= 3)).toBe(true);
   });
 
   it("keeps drill order deterministic by seed", () => {
@@ -30,14 +32,43 @@ describe("drills", () => {
     expect(first).not.toEqual(different);
   });
 
+  it("filters drill practice by skill pack with deterministic fallback", () => {
+    const focused = generateDrillChallenges(3, "focus-delete", "deletion-cleanup");
+    const fallback = generateDrillChallenges(3, "focus-delete", "indentation");
+    const defaultDrills = generateDrillChallenges(3, "focus-delete");
+
+    expect(filterDrillDefinitions("deletion-cleanup").length).toBeGreaterThan(0);
+    expect(focused).toEqual(generateDrillChallenges(3, "focus-delete", "deletion-cleanup"));
+    expect(focused.every((challenge) => challenge.skillPacks.includes("deletion-cleanup"))).toBe(true);
+    expect(fallback.map((challenge) => challenge.drill?.id)).toEqual(defaultDrills.map((challenge) => challenge.drill?.id));
+  });
+
   it("validates every first-pass drill", () => {
     const drills = generateDrillChallenges(7, "standard-v1");
-    expect(validateChallenge(drills[0], "Keep the final ", { start: 15, end: 15 })).toBe(true);
-    expect(validateChallenge(drills[1], "Remove copy now", { start: 7, end: 7 })).toBe(true);
-    expect(validateChallenge(drills[2], drills[2].editableText, { start: 10, end: 10 })).toBe(true);
-    expect(validateChallenge(drills[3], drills[3].editableText, { start: 5, end: 5 })).toBe(true);
-    expect(validateChallenge(drills[4], drills[4].editableText, { start: 12, end: 16 })).toBe(true);
-    expect(validateChallenge(drills[5], "Use a clear label.", { start: 6, end: 11 })).toBe(true);
-    expect(validateChallenge(drills[6], "Pause here, then continue.", { start: 10, end: 10 })).toBe(true);
+    for (const drill of drills) {
+      const validation = drill.drill?.validation;
+      expect(validation).toBeTruthy();
+      if (!validation) continue;
+      if (validation.type === "text") {
+        expect(validateChallenge(drill, validation.expectedText, drill.drill?.initialSelection ?? { start: 0, end: 0 })).toBe(true);
+      } else if (validation.type === "cursor") {
+        expect(validateChallenge(drill, drill.editableText, { start: validation.expectedIndex, end: validation.expectedIndex })).toBe(true);
+      } else if (validation.type === "selection") {
+        expect(validateChallenge(drill, drill.editableText, { start: validation.expectedStart, end: validation.expectedEnd })).toBe(true);
+      }
+    }
+  });
+
+  it("keeps drill metadata complete for learning summaries", () => {
+    const drills = generateDrillChallenges(7, "standard-v1");
+
+    for (const drill of drills) {
+      expect(drill.mode).toBe("drill");
+      expect(drill.skillPacks.length).toBeGreaterThan(0);
+      expect(drill.intendedShortcutPath.length).toBeGreaterThan(0);
+      expect(drill.errors.every((error) => error.skillTags.length > 0)).toBe(true);
+      expect(drill.drill?.hintByPlatform.mac).toBeTruthy();
+      expect(drill.drill?.hintByPlatform["windows-linux"]).toBeTruthy();
+    }
   });
 });

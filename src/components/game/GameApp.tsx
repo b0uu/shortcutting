@@ -5,6 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { generateTargetChallenges, seedPack } from "@/domain/challenges";
 import { generatePythonChallenges } from "@/domain/coding";
 import { generateDrillChallenges } from "@/domain/drills";
+import { changedTargetCharacterIndexes } from "@/domain/diff";
 import { createEditEvent } from "@/domain/events";
 import { detectPlatform, resolvePlatform } from "@/domain/platform";
 import { personalBestKey, summarizeResult } from "@/domain/results";
@@ -22,6 +23,7 @@ import type {
   ChallengeResult,
   EditEvent,
   Mode,
+  PracticeSuggestion,
   SelectionState,
   TestConfig,
   TestResult,
@@ -72,6 +74,7 @@ const defaultConfig: TestConfig = {
   smartPairs: true,
   reducedMotion: false,
   seedPack,
+  practiceSkillPack: null,
 };
 
 export function GameApp() {
@@ -125,10 +128,11 @@ export function GameApp() {
   useEffect(() => {
     const detected = detectPlatform(navigator.userAgent, navigator.platform);
     const merged = loadSettings(defaultConfig, detected);
+    const liveConfig = withFreshSeed(merged);
     // Local settings must hydrate once from localStorage before the user starts a run.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setConfig(merged);
-    resetPreview(merged);
+    setConfig(liveConfig);
+    resetPreview(liveConfig);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -265,10 +269,22 @@ export function GameApp() {
   function updateConfig(patch: Partial<TestConfig>) {
     const detected = detectPlatform(navigator.userAgent, navigator.platform);
     const nextPreference = patch.platformPreference ?? config.platformPreference;
+    const shouldClearPracticeFocus = patch.practiceSkillPack === undefined
+      && (
+        patch.mode !== undefined
+        || patch.difficulty !== undefined
+        || patch.challengeCount !== undefined
+        || patch.seedPack !== undefined
+      );
+    const shouldFreshenSeed = patch.seedPack === undefined
+      && patch.practiceSkillPack === undefined
+      && (patch.mode !== undefined || patch.difficulty !== undefined || patch.challengeCount !== undefined);
     const nextConfig = {
       ...config,
       ...patch,
       platform: resolvePlatform(nextPreference, detected),
+      practiceSkillPack: shouldClearPracticeFocus ? null : (patch.practiceSkillPack ?? config.practiceSkillPack ?? null),
+      seedPack: patch.seedPack ?? (shouldFreshenSeed ? freshSeedPack() : config.seedPack),
     };
     setConfig(nextConfig);
     saveSettings(nextConfig);
@@ -283,11 +299,11 @@ export function GameApp() {
     closeSettings();
     closeHistory();
     closeShortcutMap();
-    resetPreview(config);
+    resetWithFreshSeed();
   }
 
   function giveUp() {
-    resetPreview(config);
+    resetWithFreshSeed();
   }
 
   function startRunFromEditorInput() {
@@ -447,6 +463,7 @@ export function GameApp() {
       finalText,
       elapsedMs: completedAt - startedAt,
       skillTags: Array.from(new Set(challenge.errors.flatMap((error) => error.skillTags))),
+      skillPacks: challenge.skillPacks,
       estimatedCorrections: challenge.estimatedCorrections,
       ...stats.current,
     };
@@ -509,7 +526,33 @@ export function GameApp() {
     setScreenFading(true);
     if (screenFadeTimeout.current) window.clearTimeout(screenFadeTimeout.current);
     screenFadeTimeout.current = window.setTimeout(() => {
-      resetPreview(config);
+      resetWithFreshSeed();
+      requestAnimationFrame(() => setScreenFading(false));
+      screenFadeTimeout.current = null;
+    }, 180);
+  }
+
+  function resetWithFreshSeed() {
+    const nextConfig = withFreshSeed(config);
+    setConfig(nextConfig);
+    saveSettings(nextConfig);
+    resetPreview(nextConfig);
+  }
+
+  function practiceAgain(suggestion: PracticeSuggestion) {
+    setScreenFading(true);
+    if (screenFadeTimeout.current) window.clearTimeout(screenFadeTimeout.current);
+    screenFadeTimeout.current = window.setTimeout(() => {
+      const nextConfig = {
+        ...config,
+        mode: suggestion.mode,
+        difficulty: suggestion.mode === "drill" ? "standard" : suggestion.difficulty,
+        seedPack: suggestion.seedPack,
+        practiceSkillPack: suggestion.skillPack,
+      };
+      setConfig(nextConfig);
+      saveSettings(nextConfig);
+      resetPreview(nextConfig);
       requestAnimationFrame(() => setScreenFading(false));
       screenFadeTimeout.current = null;
     }, 180);
@@ -597,7 +640,12 @@ export function GameApp() {
       )}
       <main className={screenFading ? "screen-crossfade" : ""}>
         {phase === "complete" && result ? (
-          <ResultsScreen result={result} themeColors={activeThemeColors} onPlayAgain={playAgain} />
+          <ResultsScreen
+            result={result}
+            themeColors={activeThemeColors}
+            onPlayAgain={playAgain}
+            onPracticeAgain={practiceAgain}
+          />
         ) : (
           <section className={`game-view difficulty-${config.difficulty} ${config.mode === "drill" ? "drill-view" : ""} ${config.mode === "coding" ? "coding-view" : ""}`}>
             <div className="status-row">
@@ -618,7 +666,7 @@ export function GameApp() {
               >
                 {challenge.mode === "drill"
                   ? challenge.prompt
-                  : renderAttentionText(challenge.targetText, challenge.attentionRanges, challenge.editableText)}
+                  : renderAttentionText(challenge.targetText, challenge.attentionRanges, currentText)}
               </div>
             </div>
             <div className={`editor-zone ${hasCompletedSegments ? "has-history" : ""} ${drillResetVisible ? "has-reset" : ""}`}>
@@ -723,30 +771,24 @@ function renderAttentionText(text: string, ranges: Challenge["attentionRanges"],
     .sort((first, second) => first.start - second.start);
   const nodes: ReactNode[] = [];
   const highlighted = new Map<number, string>();
-  const changedTargetIndexes = sourceText === undefined ? undefined : changedCharacterIndexes(sourceText, text);
+  const changedTargetIndexes = sourceText === undefined ? undefined : changedTargetCharacterIndexes(sourceText, text);
 
-  orderedRanges.forEach((range) => {
-    let rangeMarked = false;
-    for (let cursor = range.start; cursor < range.end; cursor += 1) {
-      const character = text[cursor];
-      const shouldMark = sourceText === undefined
-        ? !/\s/.test(character)
-        : changedTargetIndexes?.has(cursor) && !/\s/.test(character);
-      if (shouldMark) {
-        highlighted.set(cursor, range.reason);
-        rangeMarked = true;
+  if (sourceText !== undefined) {
+    changedTargetIndexes?.forEach((index) => {
+      if (/\s/.test(text[index])) return;
+      const rangeReason = orderedRanges.find((range) => index >= range.start && index < range.end)?.reason;
+      highlighted.set(index, rangeReason ?? "missing from active edit");
+    });
+  } else {
+    orderedRanges.forEach((range) => {
+      for (let cursor = range.start; cursor < range.end; cursor += 1) {
+        if (!/\s/.test(text[cursor])) {
+          highlighted.set(cursor, range.reason);
+          break;
+        }
       }
-    }
-    if (!rangeMarked) {
-      const fallbackIndex = text
-        .slice(range.start, range.end)
-        .split("")
-        .findIndex((character) => !/\s/.test(character));
-      if (fallbackIndex >= 0) {
-        highlighted.set(range.start + fallbackIndex, range.reason);
-      }
-    }
-  });
+    });
+  }
 
   for (let index = 0; index < text.length; index += 1) {
     const reason = highlighted.get(index);
@@ -771,49 +813,44 @@ function activeRailHeightFor(mode: Mode, text: string): number {
   return lineHeight * lineCount;
 }
 
-function changedCharacterIndexes(sourceText: string, targetText: string): Set<number> {
-  const rows = sourceText.length + 1;
-  const cols = targetText.length + 1;
-  const table = Array.from({ length: rows }, () => Array<number>(cols).fill(0));
-
-  for (let sourceIndex = sourceText.length - 1; sourceIndex >= 0; sourceIndex -= 1) {
-    for (let targetIndex = targetText.length - 1; targetIndex >= 0; targetIndex -= 1) {
-      table[sourceIndex][targetIndex] = sourceText[sourceIndex] === targetText[targetIndex]
-        ? table[sourceIndex + 1][targetIndex + 1] + 1
-        : Math.max(table[sourceIndex + 1][targetIndex], table[sourceIndex][targetIndex + 1]);
-    }
-  }
-
-  const matchedTargetIndexes = new Set<number>();
-  let sourceIndex = 0;
-  let targetIndex = 0;
-  while (sourceIndex < sourceText.length && targetIndex < targetText.length) {
-    if (sourceText[sourceIndex] === targetText[targetIndex]) {
-      matchedTargetIndexes.add(targetIndex);
-      sourceIndex += 1;
-      targetIndex += 1;
-    } else if (table[sourceIndex + 1][targetIndex] >= table[sourceIndex][targetIndex + 1]) {
-      sourceIndex += 1;
-    } else {
-      targetIndex += 1;
-    }
-  }
-
-  const changed = new Set<number>();
-  for (let index = 0; index < targetText.length; index += 1) {
-    if (!matchedTargetIndexes.has(index)) changed.add(index);
-  }
-  return changed;
-}
-
 function buildChallenges(config: TestConfig): Challenge[] {
   if (config.mode === "target-match") {
-    return generateTargetChallenges(config.challengeCount, config.seedPack, { difficulty: config.difficulty });
+    return generateTargetChallenges(config.challengeCount, config.seedPack, {
+      difficulty: config.difficulty,
+      skillPack: config.practiceSkillPack ?? undefined,
+    });
   }
   if (config.mode === "coding") {
-    return generatePythonChallenges(config.challengeCount, config.seedPack, config.difficulty);
+    return generatePythonChallenges(
+      config.challengeCount,
+      config.seedPack,
+      config.difficulty,
+      config.practiceSkillPack ?? undefined,
+    );
   }
-  return generateDrillChallenges(config.challengeCount, config.seedPack);
+  return generateDrillChallenges(config.challengeCount, config.seedPack, config.practiceSkillPack ?? undefined);
+}
+
+function withFreshSeed(config: TestConfig): TestConfig {
+  return {
+    ...config,
+    seedPack: freshSeedPack(),
+    practiceSkillPack: null,
+  };
+}
+
+function freshSeedPack(): string {
+  const fixedSeed = seedFromLocation();
+  if (fixedSeed) return fixedSeed;
+  const time = Date.now().toString(36);
+  const random = Math.random().toString(36).slice(2, 8);
+  return `live-${time}-${random}`;
+}
+
+function seedFromLocation(): string | null {
+  if (typeof window === "undefined") return null;
+  const seed = new URLSearchParams(window.location.search).get("seed")?.trim();
+  return seed || null;
 }
 
 function initialSelection(challenge: Challenge): SelectionState {

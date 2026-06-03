@@ -16,6 +16,7 @@ describe("generateTargetChallenges", () => {
     expect(challenge.intendedShortcutPath.length).toBeGreaterThan(0);
     expect(challenge.attentionRanges.length).toBeGreaterThan(0);
     expect(challenge.difficulty).toBe("standard");
+    expect(challenge.estimatedCorrections).toBe(challenge.errors.length);
   });
 
   it("generates target attention ranges that point inside the displayed target", () => {
@@ -47,5 +48,20 @@ describe("generateTargetChallenges", () => {
     expect(challenge.targetText).toContain("\n");
     expect(challenge.editableText).toContain("\n");
     expect(challenge.difficulty).toBe("multiline");
+  });
+
+  it("keeps generated target metadata complete across difficulties", () => {
+    for (const difficulty of ["standard", "advanced", "multiline"] as const) {
+      const generated = generateTargetChallenges(6, `metadata-${difficulty}`, { difficulty });
+
+      for (const challenge of generated) {
+        expect(challenge.mode).toBe("target-match");
+        expect(challenge.skillPacks.length).toBeGreaterThan(0);
+        expect(challenge.intendedShortcutPath.length).toBeGreaterThanOrEqual(challenge.estimatedCorrections);
+        expect(challenge.estimatedCorrections).toBe(challenge.errors.length);
+        expect(challenge.errors.every((error) => error.skillTags.length > 0)).toBe(true);
+        expect(challenge.targetText).not.toBe(challenge.editableText);
+      }
+    }
   });
 });

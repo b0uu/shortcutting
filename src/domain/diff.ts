@@ -6,30 +6,74 @@ export type DiffToken = {
 };
 
 export function buildDiffTokens(currentText: string, targetText: string): DiffToken[] {
-  const max = Math.max(currentText.length, targetText.length);
   const tokens: DiffToken[] = [];
+  const table = editDistanceTable(currentText, targetText);
+  let currentIndex = 0;
+  let targetIndex = 0;
 
-  for (let index = 0; index < max; index += 1) {
-    const current = currentText[index];
-    const target = targetText[index];
-    const value = current ?? target ?? "";
-    const status = current === target
-      ? "same"
-      : current === undefined
-        ? "missing"
-        : target === undefined
-          ? "extra"
-          : "wrong";
+  while (currentIndex < currentText.length || targetIndex < targetText.length) {
+    const current = currentText[currentIndex];
+    const target = targetText[targetIndex];
+    const status = nextDiffStatus(currentText, targetText, currentIndex, targetIndex, table);
+    const value = status === "missing" ? target ?? "" : current ?? "";
 
-    tokens.push({
-      id: `${index}-${status}-${value}`,
-      value,
-      status,
-      visible: visibleCharacter(value, status),
-    });
+    tokens.push(diffToken(tokens.length, value, status));
+
+    if (status !== "missing") currentIndex += 1;
+    if (status !== "extra") targetIndex += 1;
   }
 
   return tokens;
+}
+
+export function changedTargetCharacterIndexes(sourceText: string, targetText: string): Set<number> {
+  const changed = new Set<number>();
+  const table = editDistanceTable(sourceText, targetText);
+  let sourceIndex = 0;
+  let targetIndex = 0;
+
+  while (sourceIndex < sourceText.length || targetIndex < targetText.length) {
+    const status = nextDiffStatus(sourceText, targetText, sourceIndex, targetIndex, table);
+    if (status === "wrong" || status === "missing") changed.add(targetIndex);
+    if (status !== "missing") sourceIndex += 1;
+    if (status !== "extra") targetIndex += 1;
+  }
+
+  return changed;
+}
+
+function diffToken(index: number, value: string, status: DiffToken["status"]): DiffToken {
+  return {
+    id: `${index}-${status}-${value}`,
+    value,
+    status,
+    visible: visibleCharacter(value, status),
+  };
+}
+
+function nextDiffStatus(
+  currentText: string,
+  targetText: string,
+  currentIndex: number,
+  targetIndex: number,
+  table: number[][],
+): DiffToken["status"] {
+  const current = currentText[currentIndex];
+  const target = targetText[targetIndex];
+  if (current !== undefined && target !== undefined && current === target) return "same";
+  if (current === undefined) return "missing";
+  if (target === undefined) return "extra";
+
+  const extraCost = table[currentIndex + 1]?.[targetIndex] ?? Number.POSITIVE_INFINITY;
+  const missingCost = table[currentIndex]?.[targetIndex + 1] ?? Number.POSITIVE_INFINITY;
+  const wrongCost = table[currentIndex + 1]?.[targetIndex + 1] ?? Number.POSITIVE_INFINITY;
+  const bestCost = Math.min(extraCost, missingCost, wrongCost);
+
+  if (bestCost === extraCost && current === " ") return "extra";
+  if (bestCost === missingCost && target === " ") return "missing";
+  if (bestCost === wrongCost) return "wrong";
+  if (bestCost === extraCost) return "extra";
+  return "missing";
 }
 
 function visibleCharacter(value: string, status: DiffToken["status"]): string {
@@ -40,23 +84,27 @@ function visibleCharacter(value: string, status: DiffToken["status"]): string {
 }
 
 export function editDistance(a: string, b: string): number {
+  return editDistanceTable(a, b)[0][0];
+}
+
+function editDistanceTable(a: string, b: string): number[][] {
   const rows = a.length + 1;
   const cols = b.length + 1;
   const table = Array.from({ length: rows }, () => Array<number>(cols).fill(0));
 
-  for (let row = 0; row < rows; row += 1) table[row][0] = row;
-  for (let col = 0; col < cols; col += 1) table[0][col] = col;
+  for (let row = 0; row < rows; row += 1) table[row][b.length] = a.length - row;
+  for (let col = 0; col < cols; col += 1) table[a.length][col] = b.length - col;
 
-  for (let row = 1; row < rows; row += 1) {
-    for (let col = 1; col < cols; col += 1) {
-      const cost = a[row - 1] === b[col - 1] ? 0 : 1;
+  for (let row = a.length - 1; row >= 0; row -= 1) {
+    for (let col = b.length - 1; col >= 0; col -= 1) {
+      const cost = a[row] === b[col] ? 0 : 1;
       table[row][col] = Math.min(
-        table[row - 1][col] + 1,
-        table[row][col - 1] + 1,
-        table[row - 1][col - 1] + cost,
+        table[row + 1][col] + 1,
+        table[row][col + 1] + 1,
+        table[row + 1][col + 1] + cost,
       );
     }
   }
 
-  return table[a.length][b.length];
+  return table;
 }

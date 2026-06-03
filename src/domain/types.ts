@@ -127,6 +127,7 @@ export type TestConfig = {
   smartPairs: boolean;
   reducedMotion: boolean;
   seedPack: string;
+  practiceSkillPack?: SkillPack | null;
 };
 
 export type EditEventType =
@@ -164,6 +165,7 @@ export type ChallengeResult = {
   finalText: string;
   elapsedMs: number;
   skillTags: SkillTag[];
+  skillPacks: SkillPack[];
   estimatedCorrections: number;
   hintsUsed: number;
   mouseActions: number;
@@ -177,6 +179,16 @@ export type SkillCategorySummary = {
   tag: SkillTag;
   count: number;
   averageElapsedMs: number;
+};
+
+export type PracticeSuggestion = {
+  mode: Mode;
+  difficulty: Difficulty;
+  seedPack: string;
+  skillPack: SkillPack | null;
+  skillTag: SkillTag | null;
+  label: string;
+  rationale: string;
 };
 
 export type TestResult = {
@@ -195,8 +207,11 @@ export type TestResult = {
   editsPerMinute: number;
   estimatedCorrectionCount: number;
   skillTagSummary: Partial<Record<SkillTag, number>>;
+  skillPackSummary: Partial<Record<SkillPack, number>>;
+  hintSkillSummary: Partial<Record<SkillTag, number>>;
   bestSkillCategory: SkillCategorySummary | null;
   slowestSkillCategory: SkillCategorySummary | null;
+  nextPracticeSuggestion: PracticeSuggestion;
   isPersonalBest: boolean;
   shareChallengeId: string;
 };

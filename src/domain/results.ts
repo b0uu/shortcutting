@@ -1,7 +1,9 @@
 import type {
   ChallengeResult,
   PersonalBestKey,
+  PracticeSuggestion,
   SkillCategorySummary,
+  SkillPack,
   SkillTag,
   TestConfig,
   TestResult,
@@ -66,8 +68,11 @@ export function summarizeResult(
     editsPerMinute: editsPerMinute(challengeResults, elapsedMs),
     estimatedCorrectionCount: sum(challengeResults, "estimatedCorrections"),
     skillTagSummary: skillTagSummary(challengeResults),
+    skillPackSummary: skillPackSummary(challengeResults),
+    hintSkillSummary: hintSkillSummary(challengeResults),
     bestSkillCategory: bestSkillCategory(challengeResults),
     slowestSkillCategory: slowestSkillCategory(challengeResults),
+    nextPracticeSuggestion: nextPracticeSuggestion(config, challengeResults),
     isPersonalBest,
     shareChallengeId: shareChallenge.challengeId,
   };
@@ -95,12 +100,75 @@ export function skillTagSummary(results: ChallengeResult[]): Partial<Record<Skil
   }, {} as Partial<Record<SkillTag, number>>);
 }
 
+export function skillPackSummary(results: ChallengeResult[]): Partial<Record<SkillPack, number>> {
+  return results.reduce((summary, result) => {
+    for (const pack of result.skillPacks) {
+      summary[pack] = (summary[pack] ?? 0) + 1;
+    }
+    return summary;
+  }, {} as Partial<Record<SkillPack, number>>);
+}
+
+export function hintSkillSummary(results: ChallengeResult[]): Partial<Record<SkillTag, number>> {
+  return results.reduce((summary, result) => {
+    if (result.hintsUsed <= 0) return summary;
+    for (const tag of result.skillTags) {
+      summary[tag] = (summary[tag] ?? 0) + result.hintsUsed;
+    }
+    return summary;
+  }, {} as Partial<Record<SkillTag, number>>);
+}
+
+export function nextPracticeSuggestion(config: TestConfig, results: ChallengeResult[]): PracticeSuggestion {
+  const hintedTag = topEntry(hintSkillSummary(results))?.[0] ?? null;
+  const slowTag = slowestSkillCategory(results)?.tag ?? null;
+  const topTag = topEntry(skillTagSummary(results))?.[0] ?? null;
+  const skillTag = hintedTag ?? slowTag ?? topTag;
+  const relatedResults = skillTag
+    ? results.filter((result) => result.skillTags.includes(skillTag))
+    : results;
+  const skillPack = topEntry(skillPackSummary(relatedResults))?.[0] ?? topEntry(skillPackSummary(results))?.[0] ?? null;
+
+  if (!skillTag) {
+    return {
+      mode: config.mode,
+      difficulty: config.difficulty,
+      seedPack: config.seedPack,
+      skillPack,
+      skillTag,
+      label: "practice this run again",
+      rationale: "Repeat this setup to build consistency.",
+    };
+  }
+
+  const source = hintedTag ? "hint usage" : slowTag === skillTag ? "your slowest category" : "your most common edit";
+  return {
+    mode: config.mode,
+    difficulty: config.difficulty,
+    seedPack: config.seedPack,
+    skillPack,
+    skillTag,
+    label: `practice ${formatSkill(skillTag)}`,
+    rationale: `Based on ${source}: ${formatSkill(skillTag)}.`,
+  };
+}
+
 function bestSkillCategory(results: ChallengeResult[]): SkillCategorySummary | null {
   const categories = skillCategorySummaries(results);
   if (categories.length === 0) return null;
   return categories.reduce((best, current) => (
     current.averageElapsedMs < best.averageElapsedMs ? current : best
   ));
+}
+
+function topEntry<T extends string>(summary: Partial<Record<T, number>>): [T, number] | null {
+  const entries = Object.entries(summary) as Array<[T, number]>;
+  if (entries.length === 0) return null;
+  return entries.reduce((best, current) => (current[1] > best[1] ? current : best));
+}
+
+function formatSkill(tag: SkillTag): string {
+  return tag.replaceAll("-", " ");
 }
 
 function slowestSkillCategory(results: ChallengeResult[]): SkillCategorySummary | null {

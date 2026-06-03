@@ -5,7 +5,7 @@ import html2canvas from "html2canvas";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatElapsed } from "@/domain/timer";
 import { themeCssVariables } from "@/domain/themes";
-import type { TestResult, ThemeColors } from "@/domain/types";
+import type { PracticeSuggestion, SkillTag, TestResult, ThemeColors } from "@/domain/types";
 import { ShortcutHint } from "@/components/ui/ShortcutHint";
 import { ShareCard } from "./ShareCard";
 
@@ -13,9 +13,10 @@ type ResultsScreenProps = {
   result: TestResult;
   themeColors: ThemeColors;
   onPlayAgain: () => void;
+  onPracticeAgain?: (suggestion: PracticeSuggestion) => void;
 };
 
-export function ResultsScreen({ result, themeColors, onPlayAgain }: ResultsScreenProps) {
+export function ResultsScreen({ result, themeColors, onPlayAgain, onPracticeAgain }: ResultsScreenProps) {
   const sectionRef = useRef<HTMLElement | null>(null);
   const shareRef = useRef<HTMLDivElement | null>(null);
   const tabAnimationTimeout = useRef<number | null>(null);
@@ -104,12 +105,15 @@ export function ResultsScreen({ result, themeColors, onPlayAgain }: ResultsScree
       } else if (key === "p") {
         event.preventDefault();
         requestPlayAgain();
+      } else if (key === "g" && onPracticeAgain) {
+        event.preventDefault();
+        onPracticeAgain(result.nextPracticeSuggestion);
       }
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [downloadCard, requestPlayAgain]);
+  }, [downloadCard, onPracticeAgain, requestPlayAgain, result.nextPracticeSuggestion]);
 
   return (
     <motion.section
@@ -148,6 +152,14 @@ export function ResultsScreen({ result, themeColors, onPlayAgain }: ResultsScree
         <span>{result.estimatedCorrectionCount} estimated corrections</span>
         <span>best: {formatSkill(result.bestSkillCategory?.tag)}</span>
         <span>slowest: {formatSkill(result.slowestSkillCategory?.tag)}</span>
+        <span>hint focus: {formatTopSkill(result.hintSkillSummary)}</span>
+      </div>
+      <div className="practice-card" aria-label="next practice suggestion">
+        <div>
+          <span>next practice</span>
+          <strong>{result.nextPracticeSuggestion.label}</strong>
+          <p>{result.nextPracticeSuggestion.rationale}</p>
+        </div>
       </div>
       <ShareCard ref={shareRef} result={result} themeColors={themeColors} />
       <div className="results-actions">
@@ -159,6 +171,12 @@ export function ResultsScreen({ result, themeColors, onPlayAgain }: ResultsScree
           <span>play again</span>
           <ShortcutHint keys={[modifier, "P"]} />
         </button>
+        {onPracticeAgain && (
+          <button type="button" className="btn-ghost" onClick={() => onPracticeAgain(result.nextPracticeSuggestion)}>
+            <span>practice this again</span>
+            <ShortcutHint keys={[modifier, "G"]} />
+          </button>
+        )}
       </div>
       <p className="export-status" aria-live="polite">{exportError}</p>
     </motion.section>
@@ -185,4 +203,12 @@ function Stat({ value, label }: { value: number; label: string }) {
 
 function formatSkill(tag: string | undefined): string {
   return tag ? tag.replaceAll("-", " ") : "none yet";
+}
+
+function formatTopSkill(summary: Partial<Record<SkillTag, number>> | undefined): string {
+  if (!summary) return "none yet";
+  const entries = Object.entries(summary) as Array<[SkillTag, number]>;
+  if (entries.length === 0) return "none yet";
+  const [tag, count] = entries.reduce((best, current) => (current[1] > best[1] ? current : best));
+  return `${formatSkill(tag)} (${count})`;
 }

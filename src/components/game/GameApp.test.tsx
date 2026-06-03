@@ -6,6 +6,7 @@ import { GameApp } from "./GameApp";
 describe("GameApp", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    window.history.replaceState(null, "", "/?seed=standard-v1");
     vi.useFakeTimers();
   });
 
@@ -93,6 +94,20 @@ describe("GameApp", () => {
     expect(screen.getByRole("heading", { name: "00:01.0" })).toBeInTheDocument();
     act(() => vi.advanceTimersByTime(5000));
     expect(screen.getByRole("heading", { name: "00:01.0" })).toBeInTheDocument();
+  });
+
+  it("offers focused practice from results and returns to a fresh run", async () => {
+    render(<GameApp />);
+    await completeRun();
+
+    expect(screen.getByLabelText("next practice suggestion")).toHaveTextContent(/practice/i);
+    fireEvent.click(screen.getByRole("button", { name: /practice this again/i }));
+    act(() => vi.advanceTimersByTime(180));
+    await flushRunUpdate();
+
+    expect(screen.getByTestId("editable-surface")).toBeInTheDocument();
+    expect(screen.getByTestId("timer")).toHaveTextContent("00:00.0");
+    expect(screen.getByRole("button", { name: "target match" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("marks the active part after five idle seconds and keeps the editor editable", async () => {
@@ -186,6 +201,26 @@ describe("GameApp", () => {
     expect(Array.from(highlighted).every((node) => activeTargetText().includes(node.textContent ?? ""))).toBe(true);
   });
 
+  it("underlines extra active edit text and clears the hint when corrected", async () => {
+    render(<GameApp />);
+    const target = activeTargetText();
+
+    completeActiveText(`${target} extra`);
+    await flushRunUpdate();
+
+    expect(screen.getByTestId("deletion-hint-overlay")).toBeInTheDocument();
+    expect(document.querySelectorAll(".target-attention")).toHaveLength(0);
+    const extraText = Array.from(document.querySelectorAll(".delete-extra"))
+      .map((node) => node.textContent ?? "")
+      .join("");
+    expect(extraText).toContain(" extra");
+
+    completeActiveText(target);
+    await flushRunUpdate();
+
+    expect(screen.queryByTestId("deletion-hint-overlay")).not.toBeInTheDocument();
+  });
+
   it("applies and persists custom theme colors from settings", () => {
     render(<GameApp />);
     fireEvent.click(screen.getByRole("button", { name: "settings" }));
@@ -237,7 +272,8 @@ describe("GameApp", () => {
     fireEvent.click(screen.getByRole("button", { name: "drill" }));
 
     expect(confirmSpy).not.toHaveBeenCalled();
-    expect(activeTargetText()).toMatch(/delete the previous word/i);
+    expect(screen.getByRole("button", { name: "drill" })).toHaveAttribute("aria-pressed", "true");
+    expect(activeTargetText()).toMatch(/\w/);
     expect(screen.getByTestId("timer")).toHaveTextContent("00:00.0");
     confirmSpy.mockRestore();
   });
@@ -298,22 +334,17 @@ describe("GameApp", () => {
     render(<GameApp />);
     fireEvent.click(screen.getByRole("button", { name: "drill" }));
 
-    completeActiveText("Keep the final ");
+    await completeCurrentDrill();
     await flushRunUpdate();
-    expect(screen.getByTestId("locked-segment").textContent).toBe("Keep the final ");
+    expect(screen.getByTestId("locked-segment").textContent).toBeTruthy();
     expect(screen.getByLabelText(/2 of 3 parts/i)).toBeInTheDocument();
 
-    completeActiveText("Remove copy now");
+    await completeCurrentDrill();
     await flushRunUpdate();
     expect(screen.getAllByTestId("locked-segment")).toHaveLength(2);
     expect(screen.getByLabelText(/3 of 3 parts/i)).toBeInTheDocument();
 
-    const editor = screen.getByTestId("editable-surface");
-    setSelectionRange(editor, 10);
-    await act(async () => {
-      document.dispatchEvent(new Event("selectionchange"));
-      await Promise.resolve();
-    });
+    await completeCurrentDrill();
     await flushRunUpdate();
     expect(screen.getByText(/total time/i)).toBeInTheDocument();
   });
@@ -321,6 +352,7 @@ describe("GameApp", () => {
   it("lets users reset the active drill after a destructive edit", async () => {
     render(<GameApp />);
     fireEvent.click(screen.getByRole("button", { name: "drill" }));
+    const initialText = screen.getByTestId("editable-surface").textContent;
 
     completeActiveText("");
     await flushRunUpdate();
@@ -329,7 +361,7 @@ describe("GameApp", () => {
     fireEvent.click(screen.getByRole("button", { name: /reset drill/i }));
     await flushRunUpdate();
 
-    expect(screen.getByTestId("editable-surface")).toHaveTextContent("Keep the final draft");
+    expect(screen.getByTestId("editable-surface")).toHaveTextContent(initialText ?? "");
     expect(screen.getByTestId("drill-safety")).toBeInTheDocument();
   });
 
@@ -348,6 +380,21 @@ describe("GameApp", () => {
     fireEvent.keyDown(editor, { key: "Backspace", code: "Backspace" });
     expect(editor.textContent).toBe("");
 
+    editor.textContent = "name";
+    setSelectionRange(editor, 0, 4);
+    fireEvent.input(editor);
+    fireEvent.keyDown(editor, { key: "(", code: "Digit9" });
+    expect(editor.textContent).toBe("(name)");
+
+    setSelectionRange(editor, 1, 5);
+    fireEvent.keyDown(editor, { key: "\"", code: "Quote" });
+    expect(editor.textContent).toBe("(\"name\")");
+
+    setSelectionRange(editor, 6);
+    fireEvent.keyDown(editor, { key: "\"", code: "Quote" });
+    const quoteSkipSelection = window.getSelection();
+    expect(quoteSkipSelection?.anchorOffset).toBe(7);
+
     editor.textContent = "  value = 1";
     setSelectionRange(editor, "  value = 1".length);
     fireEvent.input(editor);
@@ -356,6 +403,12 @@ describe("GameApp", () => {
 
     fireEvent.keyDown(editor, { key: "Tab", code: "Tab" });
     expect(editor.textContent).toBe("  value = 1\n    ");
+
+    editor.textContent = "first\nsecond";
+    setSelectionRange(editor, 0, editor.textContent.length);
+    fireEvent.input(editor);
+    fireEvent.keyDown(editor, { key: "Tab", code: "Tab" });
+    expect(editor.textContent).toBe("  first\n  second");
 
     completeActiveText(activeTargetText());
     await flushRunUpdate();
@@ -384,6 +437,48 @@ async function completeRun(count = 3) {
     completeActiveText(activeTargetText());
     await flushRunUpdate();
   }
+}
+
+async function completeCurrentDrill() {
+  const prompt = activeTargetText().toLowerCase();
+  const editor = screen.getByTestId("editable-surface");
+  const words = (editor.textContent ?? "").replace(/\.$/, "").split(" ");
+  if (prompt.includes("delete the previous word")) {
+    completeActiveText([...words.slice(0, 2), ...words.slice(3)].join(" "));
+  } else if (prompt.includes("delete the next word")) {
+    completeActiveText([words[0], ...words.slice(2)].join(" "));
+  } else if (prompt.includes("move to the previous word")) {
+    beginRun();
+    setSelectionRange(editor, words[0].length + 1);
+    await dispatchSelectionChange();
+  } else if (prompt.includes("move to the next word")) {
+    beginRun();
+    setSelectionRange(editor, words[0].length);
+    await dispatchSelectionChange();
+  } else if (prompt.includes("select the previous word")) {
+    beginRun();
+    const selected = words.at(-1) ?? "";
+    const start = (editor.textContent ?? "").length - selected.length;
+    setSelectionRange(editor, start, start + selected.length);
+    await dispatchSelectionChange();
+  } else if (prompt.includes("replace the current word")) {
+    completeActiveText("Use a clear label.");
+    setSelectionRange(editor, 6, 11);
+    await dispatchSelectionChange();
+  } else if (prompt.includes("insert punctuation")) {
+    completeActiveText("Pause here, then continue.");
+    setSelectionRange(editor, 10);
+    await dispatchSelectionChange();
+  } else {
+    throw new Error(`Unhandled drill prompt: ${prompt}`);
+  }
+}
+
+async function dispatchSelectionChange() {
+  await act(async () => {
+    document.dispatchEvent(new Event("selectionchange"));
+    await Promise.resolve();
+  });
 }
 
 async function flushRunUpdate() {

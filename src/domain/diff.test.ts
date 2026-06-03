@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDiffTokens, editDistance } from "./diff";
+import { buildDiffTokens, changedTargetCharacterIndexes, editDistance } from "./diff";
 
 describe("diff helpers", () => {
   it("marks same, wrong, missing, and extra characters", () => {
@@ -13,6 +13,36 @@ describe("diff helpers", () => {
     expect(buildDiffTokens("a ", "ab")[1].visible).toBe("\u00b7");
     expect(buildDiffTokens("a\n", "ab")[1].visible).toBe("\u21b5");
     expect(buildDiffTokens("a", "ab")[1].visible).toBe("\u2227");
+  });
+
+  it("does not cascade wrong characters after an extra editable space", () => {
+    const tokens = buildDiffTokens("the edge  case", "the edge case");
+
+    expect(tokens.map((token) => token.status)).toEqual([
+      "same",
+      "same",
+      "same",
+      "same",
+      "same",
+      "same",
+      "same",
+      "same",
+      "same",
+      "extra",
+      "same",
+      "same",
+      "same",
+      "same",
+    ]);
+    expect(tokens[9].visible).toBe("\u00b7");
+  });
+
+  it("tracks only target-side changes for attention shading", () => {
+    const source = "this function works but the edge  case is unclear.";
+    const target = "This function works, but the edge case is unclear.";
+
+    expect(Array.from(changedTargetCharacterIndexes(source, target))).toEqual([0, 19]);
+    expect(Array.from(changedTargetCharacterIndexes("jointhese", "join these"))).toEqual([4]);
   });
 
   it("computes edit distance", () => {
