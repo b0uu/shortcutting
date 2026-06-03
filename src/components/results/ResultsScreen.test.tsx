@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import html2canvas from "html2canvas";
 import { describe, expect, it, vi } from "vitest";
 import { darkThemeColors } from "@/domain/themes";
 import type { TestResult } from "@/domain/types";
@@ -45,6 +46,11 @@ const result: TestResult = {
     undoCount: 1,
     redoCount: 1,
   }],
+  editEvents: [
+    { id: "e1", timestamp: 1, challengeId: "c1", type: "keydown", key: "Meta" },
+    { id: "e2", timestamp: 2, challengeId: "c1", type: "keydown", key: "a" },
+    { id: "e3", timestamp: 3, challengeId: "c1", type: "keydown", key: "Backspace" },
+  ],
   totalKeystrokes: 12,
   hintsUsed: 1,
   mouseActions: 0,
@@ -77,15 +83,32 @@ describe("ResultsScreen", () => {
 
     expect(screen.getByRole("heading", { name: "00:02.0" })).toBeInTheDocument();
     expect(screen.getByText("keystrokes")).toBeInTheDocument();
-    expect(screen.getByText("clipboard")).toBeInTheDocument();
-    expect(screen.getByText("undo / redo")).toBeInTheDocument();
+    expect(screen.getByText("corrections")).toBeInTheDocument();
+    expect(screen.getByText("hints")).toBeInTheDocument();
     expect(screen.getByText("edits / min")).toBeInTheDocument();
+    expect(screen.getByLabelText("keystroke replay")).toBeInTheDocument();
+    expect(screen.getByLabelText("simulated keyboard")).toBeInTheDocument();
     expect(screen.getByText("2 estimated corrections")).toBeInTheDocument();
     expect(screen.getByText("best: capitalization")).toBeInTheDocument();
     expect(screen.getByText("hint focus: capitalization (1)")).toBeInTheDocument();
-    expect(screen.getByText("practice capitalization")).toBeInTheDocument();
+    expect(screen.queryByLabelText("next practice suggestion")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /practice this again/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /download card/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /share card/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /play again/i })).toBeInTheDocument();
+  });
+
+  it("renders a share card screenshot preview before copy or download actions", async () => {
+    vi.mocked(html2canvas).mockResolvedValue({
+      toDataURL: () => "data:image/png;base64,preview",
+      toBlob: (callback: BlobCallback) => callback(new Blob(["preview"], { type: "image/png" })),
+    } as HTMLCanvasElement);
+
+    render(<ResultsScreen result={result} themeColors={darkThemeColors} onPlayAgain={() => {}} onPracticeAgain={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: /share card/i }));
+
+    await waitFor(() => expect(screen.getByLabelText("share card preview")).toBeInTheDocument());
+    expect(screen.getByAltText("Generated share card screenshot")).toHaveAttribute("src", "data:image/png;base64,preview");
+    expect(screen.getByRole("button", { name: /copy image/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^download$/i })).toBeInTheDocument();
   });
 });

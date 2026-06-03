@@ -1,5 +1,6 @@
 import type {
   ChallengeResult,
+  EditEvent,
   PersonalBestKey,
   PracticeSuggestion,
   SkillCategorySummary,
@@ -50,6 +51,7 @@ export function summarizeResult(
   elapsedMs: number,
   challengeResults: ChallengeResult[],
   isPersonalBest: boolean,
+  editEvents: EditEvent[] = [],
 ): TestResult {
   const shareChallenge = chooseShareChallenge(challengeResults);
   return {
@@ -59,6 +61,7 @@ export function summarizeResult(
     completedAt,
     elapsedMs,
     challengeResults,
+    editEvents,
     totalKeystrokes: sum(challengeResults, "keystrokes"),
     hintsUsed: sum(challengeResults, "hintsUsed"),
     mouseActions: sum(challengeResults, "mouseActions"),

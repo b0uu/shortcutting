@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDiffTokens, changedTargetCharacterIndexes, editDistance } from "./diff";
+import { buildDeletionHintTokens, buildDiffTokens, changedTargetCharacterIndexes, editDistance } from "./diff";
 
 describe("diff helpers", () => {
   it("marks same, wrong, missing, and extra characters", () => {
@@ -35,6 +35,20 @@ describe("diff helpers", () => {
       "same",
     ]);
     expect(tokens[9].visible).toBe("\u00b7");
+  });
+
+  it("marks inserted words as deletion hints without underlining the following matched word", () => {
+    const tokens = buildDeletionHintTokens(
+      "garden cold back light\ncold clear sharp plain able\nmarket middle light",
+      "Garden cold back light.\ncold clear plain able.\nmarket middle light.",
+    );
+    const extraText = tokens
+      .filter((token) => token.status === "extra")
+      .map((token) => token.value)
+      .join("");
+
+    expect(extraText).toContain("sharp ");
+    expect(extraText).not.toContain("plain");
   });
 
   it("tracks only target-side changes for attention shading", () => {

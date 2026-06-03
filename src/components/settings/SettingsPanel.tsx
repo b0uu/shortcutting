@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useRef } from "react";
 import type { Difficulty, Mode, MousePolicy, PlatformPreference, TestConfig, Theme, ThemeColors } from "@/domain/types";
 import { ShortcutHint } from "@/components/ui/ShortcutHint";
@@ -34,8 +34,6 @@ export function SettingsPanel({ open, config, onClose, onChange, onShortcutMap, 
     return () => document.removeEventListener("keydown", handleDocumentKeyDown);
   }, [onClose, open]);
 
-  if (!open) return null;
-
   function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") {
       event.preventDefault();
@@ -63,6 +61,8 @@ export function SettingsPanel({ open, config, onClose, onChange, onShortcutMap, 
   }
 
   return (
+    <AnimatePresence>
+      {open && (
     <motion.div
       className="settings-panel"
       initial={{ opacity: 0 }}
@@ -82,7 +82,8 @@ export function SettingsPanel({ open, config, onClose, onChange, onShortcutMap, 
         tabIndex={-1}
         initial={{ y: 6 }}
         animate={{ y: 0 }}
-        transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+        exit={{ y: 8, scale: 0.985 }}
+        transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
         onKeyDown={handleKeyDown}
       >
         <h2>settings</h2>
@@ -164,6 +165,8 @@ export function SettingsPanel({ open, config, onClose, onChange, onShortcutMap, 
         </button>
       </motion.div>
     </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 

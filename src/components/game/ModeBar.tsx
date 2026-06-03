@@ -44,62 +44,63 @@ export function ModeBar({ config, hidden, onModeChange, onConfigChange }: ModeBa
             <span className="chevron-mark down" aria-hidden="true" />
           </button>
           <div className="mode-options-panel" id="run-options-panel" aria-hidden={optionsOpen ? undefined : true}>
-            {optionsOpen && (
-              <>
-                <div className="mini-segment" aria-label="part count">
-                  <span className="segment-label">parts</span>
-                  {[3, 4].map((count) => (
-                    <button
-                      key={count}
-                      type="button"
-                      aria-label={`${count} parts`}
-                      className={config.challengeCount === count ? "active" : ""}
-                      disabled={hidden}
-                      onClick={() => onConfigChange({ challengeCount: count as 3 | 4 })}
-                    >
-                      {count}
-                    </button>
-                  ))}
-                </div>
-                {!difficultyLocked && (
-                  <div className="mini-segment" aria-label="difficulty">
-                    {difficultyOptions.map((difficulty) => (
-                      <button
-                        key={difficulty}
-                        type="button"
-                        className={config.difficulty === difficulty ? "active" : ""}
-                        disabled={hidden}
-                        onClick={() => onConfigChange({ difficulty })}
-                      >
-                        {difficulty === "multiline" ? "multi-line" : difficulty}
-                      </button>
-                    ))}
-                  </div>
-                )}
+            <div className="mini-segment" aria-label={optionsOpen ? "part count" : undefined}>
+              <span className="segment-label">parts</span>
+              {[3, 4].map((count) => (
                 <button
+                  key={count}
                   type="button"
-                  className={`mode-meta-btn ${config.mousePolicy === "keyboard-only" ? "active" : ""}`}
-                  aria-label={config.mousePolicy === "keyboard-only" ? "keyboard only" : "mouse allowed"}
-                  disabled={hidden}
-                  onClick={() => onConfigChange({
-                    mousePolicy: config.mousePolicy === "keyboard-only" ? "mouse-allowed" : "keyboard-only",
-                  })}
-                >
-                  {config.mousePolicy === "keyboard-only" ? "keys only" : "mouse ok"}
-                </button>
-                <button
-                  type="button"
-                  className="mode-options-close"
-                  aria-label="Collapse run options"
-                  disabled={hidden}
+                  aria-label={`${count} parts`}
+                  className={config.challengeCount === count ? "active" : ""}
+                  disabled={hidden || !optionsOpen}
                   tabIndex={optionsOpen ? 0 : -1}
-                  onClick={() => setOptionsOpen(false)}
+                  onClick={() => onConfigChange({ challengeCount: count as 3 | 4 })}
                 >
-                  <span>done</span>
-                  <span className="chevron-mark up" aria-hidden="true" />
+                  {count}
                 </button>
-              </>
-            )}
+              ))}
+            </div>
+            <div
+              className={`mini-segment difficulty-segment ${difficultyLocked ? "hidden" : ""}`}
+              aria-label={optionsOpen && !difficultyLocked ? "difficulty" : undefined}
+              aria-hidden={optionsOpen && !difficultyLocked ? undefined : true}
+            >
+              {difficultyOptions.map((difficulty) => (
+                <button
+                  key={difficulty}
+                  type="button"
+                  className={config.difficulty === difficulty ? "active" : ""}
+                  disabled={hidden || !optionsOpen || difficultyLocked}
+                  tabIndex={optionsOpen && !difficultyLocked ? 0 : -1}
+                  onClick={() => onConfigChange({ difficulty })}
+                >
+                  {difficulty === "multiline" ? "multi-line" : difficulty}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className={`mode-meta-btn ${config.mousePolicy === "keyboard-only" ? "active" : ""}`}
+              aria-label={config.mousePolicy === "keyboard-only" ? "keyboard only" : "mouse allowed"}
+              disabled={hidden || !optionsOpen}
+              tabIndex={optionsOpen ? 0 : -1}
+              onClick={() => onConfigChange({
+                mousePolicy: config.mousePolicy === "keyboard-only" ? "mouse-allowed" : "keyboard-only",
+              })}
+            >
+              {config.mousePolicy === "keyboard-only" ? "keys only" : "mouse ok"}
+            </button>
+            <button
+              type="button"
+              className="mode-options-close"
+              aria-label="Collapse run options"
+              disabled={hidden || !optionsOpen}
+              tabIndex={optionsOpen ? 0 : -1}
+              onClick={() => setOptionsOpen(false)}
+            >
+              <span>done</span>
+              <span className="chevron-mark up" aria-hidden="true" />
+            </button>
           </div>
         </div>
       </div>

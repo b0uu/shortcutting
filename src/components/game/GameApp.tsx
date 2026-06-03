@@ -10,6 +10,7 @@ import { createEditEvent } from "@/domain/events";
 import { detectPlatform, resolvePlatform } from "@/domain/platform";
 import { personalBestKey, summarizeResult } from "@/domain/results";
 import { colorsForTheme, darkThemeColors, themeCssVariables } from "@/domain/themes";
+import { getSelectionRange, setSelectionRange } from "@/domain/text";
 import {
   completeActiveSegment,
   createSegments,
@@ -60,6 +61,10 @@ const defaultStats: ChallengeStats = {
   redoCount: 0,
 };
 
+const SCREEN_CROSSFADE_MS = 180;
+const COMPLETION_FEEDBACK_MS = 260;
+const COMPLETION_FLASH_MS = 1200;
+
 const defaultConfig: TestConfig = {
   mode: "target-match",
   challengeCount: 3,
@@ -91,7 +96,6 @@ export function GameApp() {
   const [showHint, setShowHint] = useState(false);
   const [now, setNow] = useState(0);
   const [runStartTime, setRunStartTime] = useState<number | null>(null);
-  const [challengeStartTime, setChallengeStartTime] = useState<number | null>(null);
   const [result, setResult] = useState<TestResult | null>(null);
   const [flowMatched, setFlowMatched] = useState(false);
   const [completedPulseIndex, setCompletedPulseIndex] = useState<number | null>(null);
@@ -105,21 +109,28 @@ export function GameApp() {
   const challengeResults = useRef<ChallengeResult[]>([]);
   const editEvents = useRef<EditEvent[]>([]);
   const stats = useRef<ChallengeStats>({ ...defaultStats });
+  const feedbackPausedMs = useRef(0);
   const hintTimeout = useRef<number | null>(null);
   const completionFlashTimeout = useRef<number | null>(null);
+  const completionAdvanceTimeout = useRef<number | null>(null);
   const lockedStackInnerRef = useRef<HTMLDivElement | null>(null);
   const editorFlowRef = useRef<HTMLDivElement | null>(null);
   const completing = useRef(false);
   const latestText = useRef(challenges[0].editableText);
+  const segmentsRef = useRef(segments);
   const latestSelection = useRef(selection);
   const maybeCompleteRef = useRef<(text: string, selection: SelectionState) => void>(() => {});
+  const challengeIndexRef = useRef(challengeIndex);
+  const runStartTimeRef = useRef<number | null>(null);
+  const challengeStartTimeRef = useRef<number | null>(null);
+  const configModeRef = useRef(config.mode);
 
   const challenge = segments[challengeIndex]?.challenge ?? challenges[0];
   const currentText = segments[challengeIndex]?.text ?? challenge.editableText;
   const challengeInitialSelection = useMemo(() => initialSelection(challenge), [challenge]);
   const midChallenge = phase === "active";
   const active = phase !== "complete";
-  const visibleElapsed = result?.elapsedMs ?? (runStartTime === null ? 0 : now - runStartTime);
+  const visibleElapsed = result?.elapsedMs ?? (runStartTime === null ? 0 : Math.max(0, now - runStartTime - feedbackPausedMs.current));
   const activeThemeColors = useMemo(() => colorsForTheme(config.theme, config.customTheme), [config.customTheme, config.theme]);
   const activeThemeStyle = useMemo(() => themeCssVariables(activeThemeColors) as CSSProperties, [activeThemeColors]);
   // Native caret is an intentional MVP fallback until custom mid-text cursor rendering is robust.
@@ -159,12 +170,20 @@ export function GameApp() {
   }, [currentText]);
 
   useEffect(() => {
+    segmentsRef.current = segments;
+  }, [segments]);
+
+  useEffect(() => {
     latestSelection.current = selection;
   }, [selection]);
 
   useEffect(() => {
     maybeCompleteRef.current = maybeComplete;
   });
+
+  useEffect(() => {
+    configModeRef.current = config.mode;
+  }, [config.mode]);
 
   useLayoutEffect(() => {
     if (!flowMatched || !lockedStackInnerRef.current || !editorFlowRef.current) return;
@@ -203,7 +222,7 @@ export function GameApp() {
         return;
       }
 
-      if (event.key === "Escape" && !midChallenge) {
+      if (event.key === "Escape" && phaseRef.current !== "active") {
         openSettings();
         return;
       }
@@ -245,14 +264,21 @@ export function GameApp() {
   const resetPreview = useCallback((nextConfig: TestConfig) => {
     clearScheduledWork();
     const nextChallenges = buildChallenges(nextConfig);
+    const nextSegments = createSegments(nextChallenges);
     setChallenges(nextChallenges);
-    setSegments(createSegments(nextChallenges));
+    segmentsRef.current = nextSegments;
+    setSegments(nextSegments);
+    currentChallengeRef.current = nextChallenges[0];
     setChallengeIndex(0);
-    setSelection(initialSelection(nextChallenges[0]));
+    challengeIndexRef.current = 0;
+    const nextSelection = initialSelection(nextChallenges[0]);
+    latestSelection.current = nextSelection;
+    setSelection(nextSelection);
     setPhase("pre-test");
     setShowHint(false);
     setRunStartTime(null);
-    setChallengeStartTime(null);
+    runStartTimeRef.current = null;
+    challengeStartTimeRef.current = null;
     setResult(null);
     setFlowMatched(false);
     setCompletedPulseIndex(null);
@@ -263,6 +289,7 @@ export function GameApp() {
     challengeResults.current = [];
     editEvents.current = [];
     stats.current = { ...defaultStats };
+    feedbackPausedMs.current = 0;
     completing.current = false;
   }, []);
 
@@ -286,9 +313,13 @@ export function GameApp() {
       practiceSkillPack: shouldClearPracticeFocus ? null : (patch.practiceSkillPack ?? config.practiceSkillPack ?? null),
       seedPack: patch.seedPack ?? (shouldFreshenSeed ? freshSeedPack() : config.seedPack),
     };
-    setConfig(nextConfig);
-    saveSettings(nextConfig);
-    resetPreview(nextConfig);
+    if (shouldCrossfadePreview(patch)) {
+      crossfadeToConfig(nextConfig);
+    } else {
+      setConfig(nextConfig);
+      saveSettings(nextConfig);
+      resetPreview(nextConfig);
+    }
   }
 
   function changeMode(mode: Mode) {
@@ -299,7 +330,7 @@ export function GameApp() {
     closeSettings();
     closeHistory();
     closeShortcutMap();
-    resetWithFreshSeed();
+    crossfadeToConfig(withFreshSeed(config));
   }
 
   function giveUp() {
@@ -309,12 +340,13 @@ export function GameApp() {
   function startRunFromEditorInput() {
     if (phaseRef.current !== "pre-test") return;
     const start = performance.now();
-    if (runStartTime === null) {
+    if (runStartTimeRef.current === null) {
       setRunStartTime(start);
+      runStartTimeRef.current = start;
       setNow(start);
       runStartedAtIso.current = new Date().toISOString();
     }
-    setChallengeStartTime(start);
+    challengeStartTimeRef.current = start;
     stats.current = { ...defaultStats };
     setShowHint(false);
     setPhase("active");
@@ -334,10 +366,11 @@ export function GameApp() {
 
   const phaseRef = useRef(phase);
   const currentChallengeRef = useRef(challenge);
-  useEffect(() => {
+  useLayoutEffect(() => {
     phaseRef.current = phase;
     currentChallengeRef.current = challenge;
-  }, [phase, challenge]);
+    challengeIndexRef.current = challengeIndex;
+  }, [phase, challenge, challengeIndex]);
 
   function handleEditorKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     if (!active) return;
@@ -373,10 +406,14 @@ export function GameApp() {
 
   function handleInputText(text: string, nextSelection: SelectionState) {
     startRunFromEditorInput();
-    setSegments((currentSegments) => updateActiveSegmentText(currentSegments, text));
+    setSegments((currentSegments) => {
+      const nextSegments = updateActiveSegmentText(currentSegments, text);
+      segmentsRef.current = nextSegments;
+      return nextSegments;
+    });
     setSelection(nextSelection);
     if (phaseRef.current === "active") {
-      editEvents.current.push(createEditEvent("input", challenge.id, performance.now(), {
+      editEvents.current.push(createEditEvent("input", currentChallengeRef.current.id, performance.now(), {
         textAfter: text,
         selectionAfter: nextSelection,
       }));
@@ -385,6 +422,13 @@ export function GameApp() {
   }
 
   const handleSelection = useCallback((nextSelection: SelectionState) => {
+    const previousSelection = latestSelection.current;
+    const drillSelectionStartedRun = phaseRef.current === "pre-test"
+      && configModeRef.current === "drill"
+      && !sameSelection(previousSelection, nextSelection);
+    if (drillSelectionStartedRun) startRunFromEditorInput();
+
+    latestSelection.current = nextSelection;
     setSelection(nextSelection);
     if (phaseRef.current === "active") {
       editEvents.current.push(createEditEvent("selectionchange", currentChallengeRef.current.id, performance.now(), {
@@ -392,15 +436,22 @@ export function GameApp() {
       }));
       maybeCompleteRef.current(latestText.current, nextSelection);
     }
+    // startRunFromEditorInput reads refs/setters; keeping this callback stable
+    // prevents the editor focus effect from rerunning on every parent render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function handleMouseDown(event: React.MouseEvent<HTMLDivElement>) {
-    if (phaseRef.current !== "active") return;
-    if (config.mousePolicy === "keyboard-only" && runStartTime !== null) {
+    if (phaseRef.current === "complete") return;
+    if (config.mousePolicy === "keyboard-only") {
+      const preservedSelection = getSelectionRange(event.currentTarget);
       event.preventDefault();
       event.stopPropagation();
+      latestSelection.current = preservedSelection;
+      preserveKeyboardOnlySelection(event.currentTarget, preservedSelection);
       return;
     }
+    if (phaseRef.current !== "active") return;
     stats.current.mouseActions += 1;
     editEvents.current.push(createEditEvent("mouse", challenge.id, performance.now(), {
       textBefore: latestText.current,
@@ -409,10 +460,13 @@ export function GameApp() {
   }
 
   function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
-    if (phaseRef.current !== "active") return;
-    if (config.mousePolicy !== "keyboard-only" || runStartTime === null) return;
+    if (phaseRef.current === "complete") return;
+    if (config.mousePolicy !== "keyboard-only") return;
+    const preservedSelection = getSelectionRange(event.currentTarget);
     event.preventDefault();
     event.stopPropagation();
+    latestSelection.current = preservedSelection;
+    preserveKeyboardOnlySelection(event.currentTarget, preservedSelection);
   }
 
   function handleClipboard(type: "copy" | "cut" | "paste") {
@@ -432,7 +486,11 @@ export function GameApp() {
     const resetSelection = initialSelection(currentChallengeRef.current);
     const resetText = currentChallengeRef.current.editableText;
     if (hintTimeout.current) window.clearTimeout(hintTimeout.current);
-    setSegments((currentSegments) => updateActiveSegmentText(currentSegments, resetText));
+    setSegments((currentSegments) => {
+      const nextSegments = updateActiveSegmentText(currentSegments, resetText);
+      segmentsRef.current = nextSegments;
+      return nextSegments;
+    });
     setSelection(resetSelection);
     setShowHint(false);
     setEditorResetKey((key) => key + 1);
@@ -452,54 +510,72 @@ export function GameApp() {
   }
 
   function completeChallenge(finalText: string) {
+    const completedChallenge = currentChallengeRef.current;
+    const completedIndex = challengeIndexRef.current;
     if (hintTimeout.current) window.clearTimeout(hintTimeout.current);
     const completedAt = performance.now();
-    const startedAt = challengeStartTime ?? completedAt;
+    const startedAt = challengeStartTimeRef.current ?? completedAt;
     const challengeResult: ChallengeResult = {
-      challengeId: challenge.id,
-      mode: challenge.mode,
-      beforeText: challenge.editableText,
-      targetText: challenge.targetText,
+      challengeId: completedChallenge.id,
+      mode: completedChallenge.mode,
+      beforeText: completedChallenge.editableText,
+      targetText: completedChallenge.targetText,
       finalText,
-      elapsedMs: completedAt - startedAt,
-      skillTags: Array.from(new Set(challenge.errors.flatMap((error) => error.skillTags))),
-      skillPacks: challenge.skillPacks,
-      estimatedCorrections: challenge.estimatedCorrections,
+      elapsedMs: Math.max(0, completedAt - startedAt),
+      skillTags: Array.from(new Set(completedChallenge.errors.flatMap((error) => error.skillTags))),
+      skillPacks: completedChallenge.skillPacks,
+      estimatedCorrections: completedChallenge.estimatedCorrections,
       ...stats.current,
     };
     challengeResults.current = [...challengeResults.current, challengeResult];
     playCompleteSound(config.soundEnabled);
-    const transition = completeActiveSegment(segments, finalText);
-    setSegments(transition.segments);
-
-    if (transition.complete) {
-      finalizeRun(completedAt);
-      return;
-    }
-
+    const feedbackSegments = updateActiveSegmentText(segmentsRef.current, finalText);
+    segmentsRef.current = feedbackSegments;
+    setSegments(feedbackSegments);
+    const transition = completeActiveSegment(feedbackSegments, finalText);
     setFlowMatched(true);
-    setCompletedPulseIndex(challengeIndex);
-    setPartTransition({ completedIndex: challengeIndex, activeIndex: transition.activeIndex });
-    if (completionFlashTimeout.current) window.clearTimeout(completionFlashTimeout.current);
-    completionFlashTimeout.current = window.setTimeout(() => {
-      setFlowMatched(false);
-      setCompletedPulseIndex(null);
-      setPartTransition(null);
-      completionFlashTimeout.current = null;
-    }, 1400);
+    setCompletedPulseIndex(completedIndex);
+    if (completionAdvanceTimeout.current) window.clearTimeout(completionAdvanceTimeout.current);
+    completionAdvanceTimeout.current = window.setTimeout(() => {
+      segmentsRef.current = transition.segments;
+      setSegments(transition.segments);
 
-    const nextChallenge = transition.segments[transition.activeIndex].challenge;
-    setChallengeIndex(transition.activeIndex);
-    setSelection(initialSelection(nextChallenge));
-    setChallengeStartTime(completedAt);
-    setShowHint(false);
-    stats.current = { ...defaultStats };
-    completing.current = false;
-    scheduleHint();
+      if (transition.complete) {
+        finalizeRun(completedAt);
+        completionAdvanceTimeout.current = null;
+        return;
+      }
+
+      const resumedAt = performance.now();
+      feedbackPausedMs.current += Math.max(0, resumedAt - completedAt);
+      setPartTransition({ completedIndex, activeIndex: transition.activeIndex });
+      if (completionFlashTimeout.current) window.clearTimeout(completionFlashTimeout.current);
+      completionFlashTimeout.current = window.setTimeout(() => {
+        setFlowMatched(false);
+        setCompletedPulseIndex(null);
+        setPartTransition(null);
+        completionFlashTimeout.current = null;
+      }, COMPLETION_FLASH_MS);
+
+      const nextChallenge = transition.segments[transition.activeIndex].challenge;
+      currentChallengeRef.current = nextChallenge;
+      challengeIndexRef.current = transition.activeIndex;
+      setChallengeIndex(transition.activeIndex);
+      const nextSelection = initialSelection(nextChallenge);
+      latestSelection.current = nextSelection;
+      setSelection(nextSelection);
+      challengeStartTimeRef.current = resumedAt;
+      setShowHint(false);
+      stats.current = { ...defaultStats };
+      completing.current = false;
+      scheduleHint();
+      completionAdvanceTimeout.current = null;
+    }, COMPLETION_FEEDBACK_MS);
   }
 
   async function finalizeRun(completedAt: number) {
-    const elapsedMs = runStartTime === null ? 0 : completedAt - runStartTime;
+    const startedAtMs = runStartTimeRef.current;
+    const elapsedMs = startedAtMs === null ? 0 : Math.max(0, completedAt - startedAtMs - feedbackPausedMs.current);
     const startedAt = runStartedAtIso.current ?? new Date().toISOString();
     const completedAtIso = new Date().toISOString();
     const bests = await logger.getPersonalBests();
@@ -515,6 +591,7 @@ export function GameApp() {
       elapsedMs,
       challengeResults.current,
       isPersonalBest,
+      editEvents.current,
     );
     const storedResult = await logger.saveResult(summary);
     setResult(storedResult);
@@ -523,13 +600,7 @@ export function GameApp() {
   }
 
   function playAgain() {
-    setScreenFading(true);
-    if (screenFadeTimeout.current) window.clearTimeout(screenFadeTimeout.current);
-    screenFadeTimeout.current = window.setTimeout(() => {
-      resetWithFreshSeed();
-      requestAnimationFrame(() => setScreenFading(false));
-      screenFadeTimeout.current = null;
-    }, 180);
+    crossfadeToConfig(withFreshSeed(config));
   }
 
   function resetWithFreshSeed() {
@@ -539,23 +610,26 @@ export function GameApp() {
     resetPreview(nextConfig);
   }
 
-  function practiceAgain(suggestion: PracticeSuggestion) {
+  function crossfadeToConfig(nextConfig: TestConfig) {
     setScreenFading(true);
     if (screenFadeTimeout.current) window.clearTimeout(screenFadeTimeout.current);
+    setConfig(nextConfig);
+    saveSettings(nextConfig);
+    resetPreview(nextConfig);
     screenFadeTimeout.current = window.setTimeout(() => {
-      const nextConfig = {
-        ...config,
-        mode: suggestion.mode,
-        difficulty: suggestion.mode === "drill" ? "standard" : suggestion.difficulty,
-        seedPack: suggestion.seedPack,
-        practiceSkillPack: suggestion.skillPack,
-      };
-      setConfig(nextConfig);
-      saveSettings(nextConfig);
-      resetPreview(nextConfig);
-      requestAnimationFrame(() => setScreenFading(false));
+      setScreenFading(false);
       screenFadeTimeout.current = null;
-    }, 180);
+    }, SCREEN_CROSSFADE_MS);
+  }
+
+  function practiceAgain(suggestion: PracticeSuggestion) {
+    crossfadeToConfig({
+      ...config,
+      mode: suggestion.mode,
+      difficulty: suggestion.mode === "drill" ? "standard" : suggestion.difficulty,
+      seedPack: suggestion.seedPack,
+      practiceSkillPack: suggestion.skillPack,
+    });
   }
 
   function openSettings() {
@@ -573,6 +647,10 @@ export function GameApp() {
   function openShortcutMap() {
     setSettingsOpen(false);
     setShortcutMapOpen(true);
+  }
+
+  function toggleLightDarkTheme() {
+    updateConfig({ theme: config.theme === "light" ? "dark" : "light" });
   }
 
   function closeShortcutMap() {
@@ -602,6 +680,10 @@ export function GameApp() {
     if (completionFlashTimeout.current) {
       window.clearTimeout(completionFlashTimeout.current);
       completionFlashTimeout.current = null;
+    }
+    if (completionAdvanceTimeout.current) {
+      window.clearTimeout(completionAdvanceTimeout.current);
+      completionAdvanceTimeout.current = null;
     }
     if (screenFadeTimeout.current) {
       window.clearTimeout(screenFadeTimeout.current);
@@ -666,7 +748,9 @@ export function GameApp() {
               >
                 {challenge.mode === "drill"
                   ? challenge.prompt
-                  : renderAttentionText(challenge.targetText, challenge.attentionRanges, currentText)}
+                  : challenge.mode === "coding"
+                    ? renderCodingTargetText(challenge.targetText, challenge.attentionRanges, currentText)
+                    : renderAttentionText(challenge.targetText, challenge.attentionRanges, currentText)}
               </div>
             </div>
             <div className={`editor-zone ${hasCompletedSegments ? "has-history" : ""} ${drillResetVisible ? "has-reset" : ""}`}>
@@ -724,6 +808,11 @@ export function GameApp() {
       </main>
       {phase !== "complete" && (
         <footer>
+          <span className="footer-reset-indicator">
+            <kbd className="kbd">{config.platform === "mac" ? "⌥" : "alt"}</kbd>
+            <kbd className="kbd">R</kbd>
+            reset
+          </span>
           <span><kbd className="kbd">esc</kbd> settings</span>
           <button
             type="button"
@@ -732,6 +821,15 @@ export function GameApp() {
           >
             <span aria-hidden="true">⌨</span>
             <span>shortcut map</span>
+          </button>
+          <button
+            type="button"
+            className="footer-keyboard"
+            aria-label={config.theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+            onClick={toggleLightDarkTheme}
+          >
+            <span aria-hidden="true">{config.theme === "light" ? "◐" : "◑"}</span>
+            <span>{config.theme === "light" ? "dark" : "light"}</span>
           </button>
           {midChallenge && (
             <button type="button" className="footer-keyboard danger-footer-action" onClick={giveUp}>
@@ -765,11 +863,77 @@ export function GameApp() {
 }
 
 function renderAttentionText(text: string, ranges: Challenge["attentionRanges"], sourceText?: string): ReactNode {
-  if (ranges.length === 0) return text;
+  if (ranges.length === 0 && sourceText === undefined) return text;
+  const highlighted = buildTargetHighlightMap(text, ranges, sourceText);
+  if (highlighted.size === 0) return text;
+  const nodes: ReactNode[] = [];
+
+  for (let index = 0; index < text.length; index += 1) {
+    const reason = highlighted.get(index);
+    if (reason) {
+      nodes.push(
+        <span className="target-attention" title={reason} key={`${index}-${text[index]}`}>
+          {text[index]}
+        </span>,
+      );
+    } else {
+      nodes.push(text[index]);
+    }
+  }
+
+  return nodes;
+}
+
+function renderCodingTargetText(text: string, ranges: Challenge["attentionRanges"], sourceText?: string): ReactNode {
+  const highlighted = buildTargetHighlightMap(text, ranges, sourceText);
+  const nodes: ReactNode[] = [];
+  let index = 0;
+
+  for (const line of text.split("\n")) {
+    const leadingSpaces = line.match(/^ */)?.[0].length ?? 0;
+    let consumedIndent = 0;
+
+    while (consumedIndent + 4 <= leadingSpaces) {
+      const key = `indent-${index}-${consumedIndent}`;
+      nodes.push(
+        <span className="target-indent-guide" aria-hidden="true" key={key}>
+          {"    "}
+        </span>,
+      );
+      index += 4;
+      consumedIndent += 4;
+    }
+
+    while (consumedIndent < leadingSpaces) {
+      nodes.push(" ");
+      index += 1;
+      consumedIndent += 1;
+    }
+
+    for (let lineIndex = leadingSpaces; lineIndex < line.length; lineIndex += 1) {
+      const reason = highlighted.get(index);
+      const character = line[lineIndex];
+      nodes.push(reason ? (
+        <span className="target-attention" title={reason} key={`${index}-${character}`}>
+          {character}
+        </span>
+      ) : character);
+      index += 1;
+    }
+
+    if (index < text.length) {
+      nodes.push("\n");
+      index += 1;
+    }
+  }
+
+  return nodes.length > 0 ? nodes : text;
+}
+
+function buildTargetHighlightMap(text: string, ranges: Challenge["attentionRanges"], sourceText?: string): Map<number, string> {
   const orderedRanges = ranges
     .filter((range) => range.start >= 0 && range.end > range.start && range.end <= text.length)
     .sort((first, second) => first.start - second.start);
-  const nodes: ReactNode[] = [];
   const highlighted = new Map<number, string>();
   const changedTargetIndexes = sourceText === undefined ? undefined : changedTargetCharacterIndexes(sourceText, text);
 
@@ -790,20 +954,7 @@ function renderAttentionText(text: string, ranges: Challenge["attentionRanges"],
     });
   }
 
-  for (let index = 0; index < text.length; index += 1) {
-    const reason = highlighted.get(index);
-    if (reason) {
-      nodes.push(
-        <span className="target-attention" title={reason} key={`${index}-${text[index]}`}>
-          {text[index]}
-        </span>,
-      );
-    } else {
-      nodes.push(text[index]);
-    }
-  }
-
-  return nodes;
+  return highlighted;
 }
 
 function activeRailHeightFor(mode: Mode, text: string): number {
@@ -853,11 +1004,28 @@ function seedFromLocation(): string | null {
   return seed || null;
 }
 
+function shouldCrossfadePreview(patch: Partial<TestConfig>): boolean {
+  return patch.mode !== undefined
+    || patch.difficulty !== undefined
+    || patch.challengeCount !== undefined
+    || patch.practiceSkillPack !== undefined
+    || patch.seedPack !== undefined;
+}
+
 function initialSelection(challenge: Challenge): SelectionState {
   return challenge.drill?.initialSelection ?? {
     start: challenge.editableText.length,
     end: challenge.editableText.length,
   };
+}
+
+function sameSelection(first: SelectionState, second: SelectionState): boolean {
+  return first.start === second.start && first.end === second.end;
+}
+
+function preserveKeyboardOnlySelection(element: HTMLDivElement, selection: SelectionState) {
+  element.focus();
+  setSelectionRange(element, selection.start, selection.end);
 }
 
 function isModifierKey(key: string): boolean {

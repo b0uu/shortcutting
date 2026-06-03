@@ -198,6 +198,7 @@ export type TestResult = {
   completedAt: string;
   elapsedMs: number;
   challengeResults: ChallengeResult[];
+  editEvents?: EditEvent[];
   totalKeystrokes: number;
   hintsUsed: number;
   mouseActions: number;

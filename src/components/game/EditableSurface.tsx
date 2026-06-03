@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { buildDiffTokens } from "@/domain/diff";
+import { useEffect, useLayoutEffect, useRef } from "react";
+import { buildDeletionHintTokens, buildDiffTokens } from "@/domain/diff";
 import { getEditablePlainText, getSelectionRange, setSelectionRange } from "@/domain/text";
 import type { Challenge, SelectionState } from "@/domain/types";
 
@@ -46,7 +46,7 @@ export function EditableSurface({
   const lastChallengeId = useRef(challenge.id);
   const lastSelection = useRef<SelectionState>(initialSelection);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const element = ref.current;
     if (!element) return;
 
@@ -56,7 +56,7 @@ export function EditableSurface({
     }
   }, [challenge.id, currentText]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!active || !ref.current) return;
     ref.current.focus();
     setSelectionRange(ref.current, initialSelection.start, initialSelection.end);
@@ -64,7 +64,7 @@ export function EditableSurface({
     onSelection(initialSelection);
   }, [active, challenge.id, initialSelection, onSelection]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const element = ref.current;
     if (!active || !element) return;
     element.textContent = currentText;
@@ -108,7 +108,8 @@ export function EditableSurface({
       setSelectionRange(element, lastSelection.current.start, lastSelection.current.end);
     }
 
-    function scheduleRestore() {
+    function scheduleRestore(event: Event) {
+      if (event.type === "pointerdown" && event.target instanceof Node && element?.contains(event.target)) return;
       window.setTimeout(restoreFocus, 0);
     }
 
@@ -122,13 +123,17 @@ export function EditableSurface({
 
   const diffTokens = showDiff ? buildDiffTokens(currentText, targetText) : [];
   const deletionHintTokens = !showDiff && active
-    ? buildDiffTokens(currentText, targetText).filter((token) => token.status !== "missing")
+    ? buildDeletionHintTokens(currentText, targetText)
     : [];
   const showDeletionHints = deletionHintTokens.some((token) => token.status === "extra");
   const describedBy = showDiff ? "target-text hint-text" : "target-text";
   const syntaxTokens = challenge.mode === "coding" ? buildPythonSyntaxTokens(currentText) : [];
   const showSyntax = syntaxTokens.length > 0 && !showDiff;
   const lineNumbers = showSyntax ? Array.from({ length: currentText.split("\n").length }, (_, index) => index + 1) : [];
+  const indentationHints = challenge.mode === "coding" && active && !showDiff
+    ? buildIndentationHints(currentText, targetText)
+    : [];
+  const showIndentationHints = indentationHints.some((hint) => hint.missingSpaces > 0);
 
   return (
     <div className={`edit-stack ${showDiff ? "diff-active" : ""} ${showSyntax ? "syntax-active" : ""}`}>
@@ -141,6 +146,24 @@ export function EditableSurface({
         <div className="syntax-overlay" aria-hidden="true">
           {syntaxTokens.map((token) => (
             <span key={token.id} className={`syntax-${token.type}`}>{token.text}</span>
+          ))}
+        </div>
+      )}
+      {showIndentationHints && (
+        <div className="indent-hint-overlay" aria-hidden="true" data-testid="indent-hint-overlay">
+          {indentationHints.map((hint) => (
+            <div
+              key={hint.id}
+              className={`indent-hint-line ${hint.missingSpaces > 0 ? "needs-indent" : ""}`}
+            >
+              {hint.missingSpaces > 0 && (
+                <span className="indent-hint-marker">
+                  {Array.from({ length: Math.max(1, hint.missingSpaces / 4) }, (_, index) => (
+                    <span key={index} />
+                  ))}
+                </span>
+              )}
+            </div>
           ))}
         </div>
       )}
@@ -204,6 +227,11 @@ type SyntaxToken = {
   text: string;
 };
 
+type IndentationHint = {
+  id: string;
+  missingSpaces: number;
+};
+
 const pythonKeywords = new Set([
   "and",
   "def",
@@ -240,6 +268,26 @@ function buildPythonSyntaxTokens(text: string): SyntaxToken[] {
   }
 
   return tokens;
+}
+
+function buildIndentationHints(currentText: string, targetText: string): IndentationHint[] {
+  const currentLines = currentText.split("\n");
+  const targetLines = targetText.split("\n");
+  const lineCount = Math.max(currentLines.length, targetLines.length);
+
+  return Array.from({ length: lineCount }, (_, index) => {
+    const currentIndent = leadingSpaceCount(currentLines[index] ?? "");
+    const targetIndent = leadingSpaceCount(targetLines[index] ?? "");
+    const missingSpaces = Math.max(0, targetIndent - currentIndent);
+    return {
+      id: `indent-${index}-${missingSpaces}`,
+      missingSpaces: missingSpaces - (missingSpaces % 4),
+    };
+  });
+}
+
+function leadingSpaceCount(value: string): number {
+  return value.match(/^ */)?.[0].length ?? 0;
 }
 
 function classifyPythonToken(value: string): SyntaxToken["type"] {
@@ -299,7 +347,8 @@ function handleSmartKeyDown(
   if (event.key === "Enter") {
     event.preventDefault();
     const indentation = currentLineIndentation(text, selection.start);
-    const insertion = `\n${indentation}`;
+    const blockIndentation = currentLineBeforeCursor(text, selection.start).trimEnd().endsWith(":") ? "    " : "";
+    const insertion = `\n${indentation}${blockIndentation}`;
     const nextText = spliceText(text, selection, insertion);
     const nextSelection = { start: selection.start + insertion.length, end: selection.start + insertion.length };
     syncSmartText(element, nextText, nextSelection, onInputText);
@@ -308,7 +357,7 @@ function handleSmartKeyDown(
 
   if (event.key === "Tab") {
     event.preventDefault();
-    const insertion = "  ";
+    const insertion = "    ";
     if (selection.start === selection.end) {
       const nextText = spliceText(text, selection, insertion);
       const nextSelection = { start: selection.start + insertion.length, end: selection.start + insertion.length };
@@ -353,6 +402,11 @@ function currentLineIndentation(text: string, position: number): string {
   const lineStart = text.lastIndexOf("\n", position - 1) + 1;
   const line = text.slice(lineStart, position);
   return line.match(/^\s*/)?.[0] ?? "";
+}
+
+function currentLineBeforeCursor(text: string, position: number): string {
+  const lineStart = text.lastIndexOf("\n", position - 1) + 1;
+  return text.slice(lineStart, position);
 }
 
 function indentSelectedLines(text: string, selection: SelectionState, insertion: string): { text: string; selection: SelectionState } {

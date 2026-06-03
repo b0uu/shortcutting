@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { useMemo, useState } from "react";
 import { shortcutDefinitions } from "@/domain/shortcuts";
 import type { Platform } from "@/domain/types";
@@ -22,13 +22,14 @@ export function ShortcutMapPanel({ open, platform, onClose }: ShortcutMapPanelPr
   const [selectedId, setSelectedId] = useState(definitions[0].id);
   const selected = definitions.find((definition) => definition.id === selectedId) ?? definitions[0];
 
-  if (!open) return null;
-
   return (
+    <AnimatePresence>
+      {open && (
     <motion.div
       className="settings-panel"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
       transition={{ duration: 0.2 }}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
@@ -42,7 +43,8 @@ export function ShortcutMapPanel({ open, platform, onClose }: ShortcutMapPanelPr
         tabIndex={-1}
         initial={{ y: 6 }}
         animate={{ y: 0 }}
-        transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+        exit={{ y: 8, scale: 0.985 }}
+        transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
       >
         <div className="panel-heading">
           <h2>shortcut map</h2>
@@ -83,6 +85,8 @@ export function ShortcutMapPanel({ open, platform, onClose }: ShortcutMapPanelPr
         </div>
       </motion.div>
     </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 

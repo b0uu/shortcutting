@@ -45,7 +45,7 @@ const drillFactories: DrillFactory[] = [
       const editableText = words.join(" ");
       const targetText = `${words.slice(0, removeIndex).join(" ")} ${words.slice(removeIndex + 1).join(" ")}`;
       const caret = words.slice(0, removeIndex + 1).join(" ").length;
-      return drillRecipe("delete-previous-word", "Delete the previous word.", editableText, targetText, {
+      return drillRecipe("delete-previous-word", `Delete the previous word: "${words[removeIndex]}".`, editableText, targetText, {
         validation: { type: "text", expectedText: targetText },
         initialSelection: { start: caret, end: caret },
         skillPacks: ["deletion-cleanup", "word-movement"],
@@ -73,7 +73,7 @@ const drillFactories: DrillFactory[] = [
       const editableText = words.join(" ");
       const targetText = `${words[0]} ${words.slice(2).join(" ")}`;
       const caret = words[0].length + 1;
-      return drillRecipe("delete-next-word", "Delete the next word.", editableText, targetText, {
+      return drillRecipe("delete-next-word", `Delete the next word: "${words[removeIndex]}".`, editableText, targetText, {
         validation: { type: "text", expectedText: targetText },
         initialSelection: { start: caret, end: caret },
         skillPacks: ["deletion-cleanup", "word-movement"],
@@ -99,7 +99,7 @@ const drillFactories: DrillFactory[] = [
       const words = uniqueWords(rng, 3);
       const text = words.join(" ");
       const expectedIndex = words[0].length + 1;
-      return drillRecipe("move-previous-word", "Move to the previous word.", text, text, {
+      return drillRecipe("move-previous-word", `Move the caret to the start of "${words[1]}".`, text, text, {
         validation: { type: "cursor", expectedIndex },
         initialSelection: { start: text.length, end: text.length },
         skillPacks: ["word-movement"],
@@ -125,7 +125,7 @@ const drillFactories: DrillFactory[] = [
       const words = uniqueWords(rng, 3);
       const text = words.join(" ");
       const expectedIndex = words[0].length;
-      return drillRecipe("move-next-word", "Move to the next word.", text, text, {
+      return drillRecipe("move-next-word", `Move the caret to the end of "${words[0]}".`, text, text, {
         validation: { type: "cursor", expectedIndex },
         initialSelection: { start: 0, end: 0 },
         skillPacks: ["word-movement"],
@@ -152,7 +152,7 @@ const drillFactories: DrillFactory[] = [
       const text = words.join(" ");
       const selected = words[2];
       const expectedStart = text.length - selected.length;
-      return drillRecipe("select-previous-word", "Select the previous word.", text, text, {
+      return drillRecipe("select-previous-word", `Select the final word: "${selected}".`, text, text, {
         validation: { type: "selection", expectedStart, expectedEnd: text.length },
         initialSelection: { start: text.length, end: text.length },
         skillPacks: ["selection-practice", "word-movement"],
@@ -165,14 +165,14 @@ const drillFactories: DrillFactory[] = [
   },
   {
     id: "replace-current-word",
-    instruction: "Replace the current word.",
+    instruction: "Replace the marked word.",
     skillPacks: ["selection-practice", "deletion-cleanup"],
     skillTags: ["selection", "replacement"],
-    intendedShortcutPath: ["select current word", "type replacement"],
+    intendedShortcutPath: ["move to marked word", "select word", "type replacement"],
     attention: ["current word"],
     hintByPlatform: {
-      mac: "Select the word, then type the replacement.",
-      "windows-linux": "Select the word, then type the replacement.",
+      mac: "Move to the word, select it, then type the replacement.",
+      "windows-linux": "Move to the word, select it, then type the replacement.",
     },
     build: (rng) => {
       const words = uniqueWords(rng, 3);
@@ -182,13 +182,12 @@ const drillFactories: DrillFactory[] = [
       targetWords[1] = replacement;
       const targetText = sentence(targetWords);
       const start = words[0].length + 1;
-      const end = start + words[1].length;
-      return drillRecipe("replace-current-word", "Replace the current word.", editableText, targetText, {
+      return drillRecipe("replace-current-word", `Replace "${words[1]}" with "${replacement}".`, editableText, targetText, {
         validation: { type: "text", expectedText: targetText },
-        initialSelection: { start, end },
+        initialSelection: { start, end: start },
         skillPacks: ["selection-practice", "deletion-cleanup"],
         skillTags: ["selection", "replacement"],
-        intendedShortcutPath: ["select current word", "type replacement"],
+        intendedShortcutPath: ["move to marked word", "select word", "type replacement"],
         attention: [{ text: replacement, reason: "replacement target", skillTags: ["selection", "replacement"] }],
         errors: [{ type: "wrong-word", skillTags: ["selection", "replacement"] }],
       });
@@ -211,7 +210,7 @@ const drillFactories: DrillFactory[] = [
       const targetText = `${first.join(" ")}, ${second.join(" ")}.`;
       const editableText = `${first.join(" ")} ${second.join(" ")}.`;
       const commaIndex = first.join(" ").length;
-      return drillRecipe("insert-punctuation", "Insert punctuation at the target position.", editableText, targetText, {
+      return drillRecipe("insert-punctuation", `Insert a comma after "${first[1]}".`, editableText, targetText, {
         validation: { type: "text", expectedText: targetText },
         initialSelection: { start: commaIndex, end: commaIndex },
         skillPacks: ["punctuation-casing"],

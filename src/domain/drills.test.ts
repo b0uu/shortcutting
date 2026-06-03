@@ -21,6 +21,7 @@ describe("drills", () => {
     expect(drills.every((challenge) => challenge.skillPacks.length > 0)).toBe(true);
     expect(drills.every((challenge) => challenge.estimatedCorrections > 0)).toBe(true);
     expect(drills.every((challenge) => challenge.targetText.split(" ").length >= 3)).toBe(true);
+    expect(drills.every((challenge) => challenge.drill?.initialSelection?.start === challenge.drill?.initialSelection?.end)).toBe(true);
   });
 
   it("keeps drill order deterministic by seed", () => {
@@ -57,6 +58,19 @@ describe("drills", () => {
         expect(validateChallenge(drill, drill.editableText, { start: validation.expectedStart, end: validation.expectedEnd })).toBe(true);
       }
     }
+  });
+
+  it("uses self-contained prompts that name the object and outcome", () => {
+    const drills = generateDrillChallenges(7, "standard-v1");
+    const promptById = new Map(drills.map((challenge) => [challenge.drill?.id, challenge.prompt]));
+
+    expect(promptById.get("delete-previous-word")).toMatch(/^Delete the previous word: ".+"\.$/);
+    expect(promptById.get("delete-next-word")).toMatch(/^Delete the next word: ".+"\.$/);
+    expect(promptById.get("move-previous-word")).toMatch(/^Move the caret to the start of ".+"\.$/);
+    expect(promptById.get("move-next-word")).toMatch(/^Move the caret to the end of ".+"\.$/);
+    expect(promptById.get("select-previous-word")).toMatch(/^Select the final word: ".+"\.$/);
+    expect(promptById.get("replace-current-word")).toMatch(/^Replace ".+" with ".+"\.$/);
+    expect(promptById.get("insert-punctuation")).toMatch(/^Insert a comma after ".+"\.$/);
   });
 
   it("keeps drill metadata complete for learning summaries", () => {

@@ -100,4 +100,30 @@ describe("HistoryPanel", () => {
     expect(confirmSpy).not.toHaveBeenCalled();
     confirmSpy.mockRestore();
   });
+
+  it("limits recent history rows and reveals older runs on request", async () => {
+    window.localStorage.clear();
+    const logger = new LocalResultLogger();
+    for (let index = 0; index < 9; index += 1) {
+      await logger.saveResult({
+        ...baseResult,
+        id: `result-${index}`,
+        completedAt: `2026-06-01T00:00:${String(index).padStart(2, "0")}.000Z`,
+        elapsedMs: 1000 + index,
+      });
+    }
+
+    render(<HistoryPanel open logger={logger} onClose={() => {}} />);
+
+    await screen.findByText(/9 recent runs/i);
+    expect(screen.getByText(/showing 4/i)).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "History" })).not.toHaveClass("history-card-expanded");
+    expect(screen.getByLabelText("recent runs").querySelectorAll(".history-row")).toHaveLength(4);
+
+    fireEvent.click(screen.getByRole("button", { name: /show more/i }));
+
+    expect(screen.getByLabelText("recent runs").querySelectorAll(".history-row")).toHaveLength(9);
+    expect(screen.getByRole("dialog", { name: "History" })).toHaveClass("history-card-expanded");
+    expect(screen.queryByRole("button", { name: /show more/i })).not.toBeInTheDocument();
+  });
 });

@@ -13,15 +13,15 @@ export const darkThemeColors: ThemeColors = {
 };
 
 export const lightThemeColors: ThemeColors = {
-  background: "#f0ebe3",
-  panel: "#e8e2d9",
-  card: "#e4ddd3",
-  text: "#3a3530",
-  mutedText: "#655c53",
-  accent: "#9f442e",
-  success: "#2f6f38",
-  error: "#9f3030",
-  focus: "#9f442e",
+  background: "#f7f1e8",
+  panel: "#efe6dc",
+  card: "#e8dacd",
+  text: "#332f2a",
+  mutedText: "#766b60",
+  accent: "#b85b35",
+  success: "#3f7a4b",
+  error: "#b4463f",
+  focus: "#b85b35",
 };
 
 export function colorsForTheme(theme: Theme, customTheme: ThemeColors): ThemeColors {

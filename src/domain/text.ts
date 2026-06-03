@@ -8,6 +8,8 @@ export function getEditablePlainText(element: HTMLElement): string {
 }
 
 export function setSelectionRange(element: HTMLElement, start: number, end = start) {
+  if (!element.isConnected) return;
+
   const doc = element.ownerDocument;
   const selection = doc.getSelection();
   if (!selection) return;
@@ -19,6 +21,7 @@ export function setSelectionRange(element: HTMLElement, start: number, end = sta
   range.setStart(textNode, safeStart);
   range.setEnd(textNode, safeEnd);
   selection.removeAllRanges();
+  if (!element.isConnected) return;
   selection.addRange(range);
 }
 

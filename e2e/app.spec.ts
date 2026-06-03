@@ -1,8 +1,28 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+async function completeVisiblePart(page: Page, index: number, total: number) {
+  const editor = page.getByTestId("editable-surface");
+  const target = await page.locator(".target-block").textContent();
+  const before = await editor.evaluate((node) => node.textContent ?? "");
+  const after = target ?? "";
+
+  await editor.evaluate((node, value) => {
+    node.textContent = value;
+    node.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }));
+  }, after);
+
+  if (index < total - 1) {
+    await expect(page.locator(".pips")).toHaveAttribute("aria-label", `${index + 2} of ${total} parts`);
+  } else {
+    await expect(page.getByText(/total time/i)).toBeVisible();
+  }
+
+  return { before, after };
+}
 
 test("loads the shortcutting ready editor", async ({ page }) => {
   await page.goto("/?seed=standard-v1");
-  await expect(page.getByText("shortcutting")).toBeVisible();
+  await expect(page.getByRole("button", { name: "shortcutting home" })).toBeVisible();
   await expect(page.getByRole("button", { name: /start/i })).toHaveCount(0);
   await expect(page.getByRole("dialog", { name: /target match/i })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "target match" })).toBeVisible();
@@ -11,6 +31,10 @@ test("loads the shortcutting ready editor", async ({ page }) => {
   await expect(page.getByTestId("results-tab-coach")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "settings" }).locator(".shortcut-hint")).toBeVisible();
   await expect(page.getByRole("button", { name: "target match" }).locator(".shortcut-hint")).toBeVisible();
+  await page.getByRole("button", { name: /switch to light mode/i }).click();
+  await expect(page.locator(".app-shell")).toHaveAttribute("data-theme", "light");
+  await page.getByRole("button", { name: /switch to dark mode/i }).click();
+  await expect(page.locator(".app-shell")).toHaveAttribute("data-theme", "dark");
   await page.getByRole("button", { name: "shortcut map" }).click();
   await expect(page.getByRole("dialog", { name: "Keyboard shortcut map" })).toBeVisible();
   await expect(page.getByLabel("mock keyboard").locator(".keyboard-row")).toHaveCount(5);
@@ -71,21 +95,18 @@ test("completes a 3-part run, persists PB, exports share card, and supports ligh
   const expectedAfter: string[] = [];
 
   for (let index = 0; index < 3; index += 1) {
-    const editor = page.getByTestId("editable-surface");
-    const target = await page.locator(".target-block").textContent();
-    expectedBefore.push(await editor.evaluate((node) => node.textContent ?? ""));
-    expectedAfter.push(target ?? "");
-    await editor.evaluate((node, value) => {
-      node.textContent = value;
-      node.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }));
-    }, target ?? "");
-    if (index < 2) {
-      await expect(page.locator(".pips")).toHaveAttribute("aria-label", `${index + 2} of 3 parts`);
-    }
+    const completed = await completeVisiblePart(page, index, 3);
+    expectedBefore.push(completed.before);
+    expectedAfter.push(completed.after);
   }
-
-  await expect(page.getByText(/total time/i)).toBeVisible();
   await expect(page.getByText(/personal best/i)).toBeVisible();
+  await expect(page.locator(".results-grid .stat-card")).toHaveCount(4);
+  await expect(page.getByLabel("keystroke replay")).toBeVisible();
+  await expect(page.locator(".results-keystroke-panel")).toBeVisible();
+  await expect(page.getByLabel("simulated keyboard")).toBeVisible();
+  await expect(page.locator(".keystroke-ticker")).toBeVisible();
+  await expect.poll(async () => page.locator(".keystroke-ticker span").evaluate((node) => getComputedStyle(node).animationName)).toContain("keystrokeTicker");
+  await expect.poll(async () => page.locator(".results-playback-keyboard .lit").first().evaluate((node) => getComputedStyle(node).animationName)).toContain("playbackKeyPulse");
   await expect(page.getByText(/final text matched/i)).toBeVisible();
   await expect(page.locator(".share-pair .before")).toContainText(/.+/);
   await expect(page.locator(".share-pair .after")).toContainText(/.+/);
@@ -109,17 +130,15 @@ test("completes a 3-part run, persists PB, exports share card, and supports ligh
   await expect(page.getByTestId("timer")).toHaveText("00:00.0");
 
   for (let index = 0; index < 3; index += 1) {
-    const target = await page.locator(".target-block").textContent();
-    await page.getByTestId("editable-surface").evaluate((node, value) => {
-      node.textContent = value;
-      node.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }));
-    }, target ?? "");
+    await completeVisiblePart(page, index, 3);
   }
-  await expect(page.getByText(/total time/i)).toBeVisible();
   await page.locator(".results-view").focus();
+  const downloadBeforeTab = await page.getByRole("button", { name: /share card/i }).boundingBox();
   await page.keyboard.press("Tab");
   await expect(page.getByTestId("results-tab-coach")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: /download card/i })).toBeFocused();
+  const downloadAfterTab = await page.getByRole("button", { name: /share card/i }).boundingBox();
+  expect(downloadBeforeTab?.x ?? 0).toBeGreaterThan(downloadAfterTab?.x ?? 0);
+  await expect(page.getByRole("button", { name: /share card/i })).toBeFocused();
   await expect.poll(async () => page.evaluate(() => {
     const active = document.activeElement;
     return active instanceof HTMLElement ? getComputedStyle(active).boxShadow : "none";
@@ -137,10 +156,14 @@ test("completes a 3-part run, persists PB, exports share card, and supports ligh
     return stored ? Object.keys(JSON.parse(stored)).length : 0;
   })).toBeGreaterThan(0);
 
-  const downloadPromise = page.waitForEvent("download");
-  await expect(page.getByRole("button", { name: /download card/i }).locator(".shortcut-hint")).toBeVisible();
+  await expect(page.getByRole("button", { name: /share card/i }).locator(".shortcut-hint")).toBeVisible();
   await expect(page.getByRole("button", { name: /play again/i }).locator(".shortcut-hint")).toBeVisible();
-  await page.getByRole("button", { name: /download card/i }).click();
+  await page.getByRole("button", { name: /share card/i }).click();
+  await expect(page.getByLabel("share card preview")).toBeVisible();
+  await expect(page.getByAltText("Generated share card screenshot")).toBeVisible();
+  await expect(page.getByRole("button", { name: /copy image/i })).toBeVisible();
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: /^download$/i }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe("shortcutting-result.png");
 
@@ -155,14 +178,9 @@ test("runs result action shortcuts", async ({ page }) => {
   await page.goto("/?seed=standard-v1");
 
   for (let index = 0; index < 3; index += 1) {
-    const target = await page.locator(".target-block").textContent();
-    await page.getByTestId("editable-surface").evaluate((node, value) => {
-      node.textContent = value;
-      node.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }));
-    }, target ?? "");
+    await completeVisiblePart(page, index, 3);
   }
 
-  await expect(page.getByText(/total time/i)).toBeVisible();
   await page.keyboard.press("Alt+P");
   await expect(page.getByTestId("editable-surface")).toBeVisible();
   await expect(page.getByTestId("timer")).toHaveText("00:00.0");
@@ -174,14 +192,10 @@ test("completes a run and starts focused practice from results", async ({ page }
   await page.reload();
 
   for (let index = 0; index < 3; index += 1) {
-    const target = await page.locator(".target-block").textContent();
-    await page.getByTestId("editable-surface").evaluate((node, value) => {
-      node.textContent = value;
-      node.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }));
-    }, target ?? "");
+    await completeVisiblePart(page, index, 3);
   }
 
-  await expect(page.getByLabel("next practice suggestion")).toContainText(/practice/i);
+  await expect(page.getByLabel("next practice suggestion")).toHaveCount(0);
   await expect(page.getByText(/hint focus/i)).toBeVisible();
   await page.getByRole("button", { name: /practice this again/i }).click();
   await expect(page.getByTestId("editable-surface")).toBeVisible();
@@ -198,15 +212,55 @@ test("completes a Python Coding Mode run", async ({ page }) => {
   await expect(page.getByText(/python target/i)).toBeVisible();
 
   for (let index = 0; index < 3; index += 1) {
-    const target = await page.locator(".target-block").textContent();
-    await page.getByTestId("editable-surface").evaluate((node, value) => {
-      node.textContent = value;
-      node.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }));
-    }, target ?? "");
+    await completeVisiblePart(page, index, 3);
   }
-
-  await expect(page.getByText(/total time/i)).toBeVisible();
   await expect(page.getByText(/Python Coding/i)).toBeVisible();
+});
+
+test("completes Coding Mode runs across advanced and multiline generators", async ({ page }) => {
+  for (const difficulty of ["advanced", "multi-line"]) {
+    await page.goto(`/?seed=coding-${difficulty}`);
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+
+    await page.getByRole("button", { name: /show run options/i }).click();
+    await page.getByRole("button", { name: difficulty }).click();
+    await page.getByRole("button", { name: "coding" }).click();
+    await expect(page.getByText(/python target/i)).toBeVisible();
+    if (difficulty === "multi-line") {
+      await expect(page.locator(".target-block")).toContainText(/\n/);
+      await expect.poll(async () => page.locator(".target-indent-guide").count()).toBeGreaterThan(0);
+    }
+
+    for (let index = 0; index < 3; index += 1) {
+      await completeVisiblePart(page, index, 3);
+    }
+    await expect(page.getByText(/Python Coding/i)).toBeVisible();
+  }
+});
+
+test("completes a multiline Coding part through real keyboard input", async ({ page }) => {
+  await page.goto("/?seed=sample-multiline");
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+
+  await page.getByRole("button", { name: /show run options/i }).click();
+  await page.getByRole("button", { name: "multi-line" }).click();
+  await page.getByRole("button", { name: "coding" }).click();
+  await expect(page.getByText(/python target/i)).toBeVisible();
+
+  const target = await page.locator(".target-block").textContent();
+  expect(target).toMatch(/^for .+:\n    print\(.+\)$/);
+  const [header, body] = (target ?? "").split("\n");
+  const editor = page.getByTestId("editable-surface");
+  await editor.click();
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
+  await page.keyboard.type(header, { delay: 1 });
+  await page.keyboard.press("Enter");
+  await page.keyboard.type(body.trim(), { delay: 1 });
+
+  await expect(page.locator(".pips")).toHaveAttribute("aria-label", "2 of 3 parts");
+  await expect(editor).not.toHaveText(target ?? "");
 });
 
 test("keeps the target panel and active editor stable when the target changes", async ({ page }) => {
@@ -276,7 +330,29 @@ test("keeps the editor focused after outside clicks", async ({ page }) => {
 test("keyboard-only mode blocks active mouse cursor placement", async ({ page }) => {
   await page.goto("/?seed=standard-v1");
   const editor = page.getByTestId("editable-surface");
-  await editor.click();
+  await expect.poll(async () => editor.textContent()).not.toBe("");
+
+  const initialSelection = await editor.evaluate((node) => {
+    const selection = document.getSelection();
+    return {
+      text: node.textContent ?? "",
+      anchorOffset: selection?.anchorOffset ?? -1,
+      focusOffset: selection?.focusOffset ?? -1,
+    };
+  });
+  const initialBox = await editor.boundingBox();
+  expect(initialBox).not.toBeNull();
+  await page.mouse.click(initialBox!.x + 8, initialBox!.y + initialBox!.height / 2);
+  await expect.poll(async () => editor.evaluate((node) => {
+    const selection = document.getSelection();
+    return {
+      text: node.textContent ?? "",
+      anchorOffset: selection?.anchorOffset ?? -1,
+      focusOffset: selection?.focusOffset ?? -1,
+    };
+  })).toEqual(initialSelection);
+
+  await editor.evaluate((node) => (node as HTMLElement).focus());
   await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
   await page.keyboard.type("abcd");
 
@@ -286,6 +362,62 @@ test("keyboard-only mode blocks active mouse cursor placement", async ({ page })
   await page.keyboard.type("Z");
 
   await expect(editor).toHaveText("abcdZ");
+});
+
+test("starts drill timing from caret movement", async ({ page }) => {
+  await page.goto("/?seed=standard-v1");
+  await page.getByRole("button", { name: "drill" }).click();
+  await expect(page.getByTestId("timer")).toHaveText("00:00.0");
+
+  await page.getByTestId("editable-surface").evaluate((node) => {
+    const text = node.firstChild;
+    if (!text) return;
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.collapse(true);
+    const selection = document.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+  });
+
+  await expect(page.getByTestId("timer")).not.toHaveText("00:00.0");
+});
+
+test("clears drill word selection before the next challenge starts", async ({ page }) => {
+  await page.goto("/?seed=drill-select-1");
+  await page.getByRole("button", { name: "drill" }).click();
+  await expect(page.locator(".target-block")).toContainText(/select the final word/i);
+
+  await page.getByTestId("editable-surface").evaluate((node) => {
+    const text = node.firstChild;
+    const value = node.textContent ?? "";
+    const selected = value.split(" ").at(-1) ?? "";
+    const start = value.length - selected.length;
+    if (!text) return;
+    const range = document.createRange();
+    range.setStart(text, start);
+    range.setEnd(text, value.length);
+    const selection = document.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+  });
+
+  await expect(page.locator(".pips")).toHaveAttribute("aria-label", "2 of 3 parts");
+  await expect(page.locator(".target-block")).toContainText(/^Replace "/);
+  await expect.poll(async () => page.getByTestId("editable-surface").evaluate((node) => {
+    const selection = document.getSelection();
+    return {
+      selectedText: selection?.toString() ?? "",
+      collapsed: selection?.isCollapsed ?? false,
+      insideEditor: selection?.rangeCount ? node.contains(selection.getRangeAt(0).commonAncestorContainer) : false,
+    };
+  })).toEqual({
+    selectedText: "",
+    collapsed: true,
+    insideEditor: true,
+  });
 });
 
 test("supports mid-text editing and paste in the contenteditable editor", async ({ page, context }) => {

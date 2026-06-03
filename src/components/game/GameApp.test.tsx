@@ -100,7 +100,7 @@ describe("GameApp", () => {
     render(<GameApp />);
     await completeRun();
 
-    expect(screen.getByLabelText("next practice suggestion")).toHaveTextContent(/practice/i);
+    expect(screen.queryByLabelText("next practice suggestion")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /practice this again/i }));
     act(() => vi.advanceTimersByTime(180));
     await flushRunUpdate();
@@ -150,6 +150,7 @@ describe("GameApp", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.getByRole("dialog", { name: /settings/i })).toBeInTheDocument();
     fireEvent.keyDown(window, { key: "Escape" });
+    act(() => vi.advanceTimersByTime(260));
 
     const settingsButton = screen.getByRole("button", { name: "settings" });
     expect(settingsButton).not.toBeDisabled();
@@ -158,7 +159,8 @@ describe("GameApp", () => {
     expect(screen.getByTestId("editable-surface")).toHaveAttribute("contenteditable", "true");
 
     fireEvent.keyDown(window, { key: "Escape" });
-    expect(screen.queryByRole("dialog", { name: /settings/i })).not.toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(260));
+    expect(settingsButton).toBeDisabled();
   });
 
   it("opens settings, supports 4-part runs, updates theme, and returns focus on close", () => {
@@ -174,6 +176,16 @@ describe("GameApp", () => {
     expect(screen.queryByRole("button", { name: /start challenge/i })).not.toBeInTheDocument();
     expect(document.querySelector(".pips")).toHaveAttribute("aria-label", "1 of 4 parts");
     expect(settingsButton).toHaveFocus();
+  });
+
+  it("toggles light and dark themes from the footer", () => {
+    render(<GameApp />);
+
+    fireEvent.click(screen.getByRole("button", { name: /switch to light mode/i }));
+    expect(document.querySelector(".app-shell")).toHaveAttribute("data-theme", "light");
+
+    fireEvent.click(screen.getByRole("button", { name: /switch to dark mode/i }));
+    expect(document.querySelector(".app-shell")).toHaveAttribute("data-theme", "dark");
   });
 
   it("keeps run options collapsed until opened from the mode bar", () => {
@@ -309,11 +321,13 @@ describe("GameApp", () => {
     expect(screen.getByLabelText(/2 of 3 parts/i)).toBeInTheDocument();
   });
 
-  it("blocks active-run mouse placement in keyboard-only mode", () => {
+  it("blocks mouse and pointer caret placement in keyboard-only mode", () => {
     render(<GameApp />);
-    expect(fireEvent.mouseDown(screen.getByTestId("editable-surface"))).toBe(true);
+    expect(fireEvent.mouseDown(screen.getByTestId("editable-surface"))).toBe(false);
+    expect(fireEvent.pointerDown(screen.getByTestId("editable-surface"))).toBe(false);
     beginRun();
     expect(fireEvent.mouseDown(screen.getByTestId("editable-surface"))).toBe(false);
+    expect(fireEvent.pointerDown(screen.getByTestId("editable-surface"))).toBe(false);
   });
 
   it("records mouse actions in mouse-allowed mode", async () => {
@@ -327,7 +341,7 @@ describe("GameApp", () => {
     expect(fireEvent.mouseDown(screen.getByTestId("editable-surface"))).toBe(true);
     await completeRun();
 
-    expect(screen.getByText("mouse actions").previousElementSibling).toHaveTextContent("1");
+    expect(screen.getByText(/1 mouse actions/)).toBeInTheDocument();
   });
 
   it("completes text and cursor drills through the segmented UI", async () => {
@@ -347,6 +361,18 @@ describe("GameApp", () => {
     await completeCurrentDrill();
     await flushRunUpdate();
     expect(screen.getByText(/total time/i)).toBeInTheDocument();
+  });
+
+  it("starts drill timing when the user moves the caret", async () => {
+    render(<GameApp />);
+    fireEvent.click(screen.getByRole("button", { name: "drill" }));
+    const editor = screen.getByTestId("editable-surface");
+
+    setSelectionRange(editor, 0);
+    await dispatchSelectionChange();
+    act(() => vi.advanceTimersByTime(1000));
+
+    expect(screen.getByTestId("timer")).toHaveTextContent("00:01.0");
   });
 
   it("lets users reset the active drill after a destructive edit", async () => {
@@ -402,17 +428,47 @@ describe("GameApp", () => {
     expect(editor.textContent).toBe("  value = 1\n  ");
 
     fireEvent.keyDown(editor, { key: "Tab", code: "Tab" });
-    expect(editor.textContent).toBe("  value = 1\n    ");
+    expect(editor.textContent).toBe("  value = 1\n      ");
+
+    editor.textContent = "if ready:";
+    setSelectionRange(editor, editor.textContent.length);
+    fireEvent.input(editor);
+    fireEvent.keyDown(editor, { key: "Enter", code: "Enter" });
+    expect(editor.textContent).toBe("if ready:\n    ");
 
     editor.textContent = "first\nsecond";
     setSelectionRange(editor, 0, editor.textContent.length);
     fireEvent.input(editor);
     fireEvent.keyDown(editor, { key: "Tab", code: "Tab" });
-    expect(editor.textContent).toBe("  first\n  second");
+    expect(editor.textContent).toBe("    first\n    second");
 
     completeActiveText(activeTargetText());
     await flushRunUpdate();
     expect(screen.getByLabelText(/2 of 3 parts/i)).toBeInTheDocument();
+  });
+
+  it("signals required Python indentation in the target and active editor", async () => {
+    window.history.replaceState(null, "", "/?seed=sample-multiline");
+    render(<GameApp />);
+
+    fireEvent.click(screen.getByRole("button", { name: /show run options/i }));
+    fireEvent.click(screen.getByRole("button", { name: "multi-line" }));
+    fireEvent.click(screen.getByRole("button", { name: "coding" }));
+
+    const target = activeTargetText();
+    expect(target).toContain("\n    ");
+    expect(document.querySelectorAll(".target-indent-guide").length).toBeGreaterThan(0);
+
+    const underIndented = target
+      .split("\n")
+      .map((line) => line.startsWith("    ") ? line.slice(4) : line)
+      .join("\n");
+    completeActiveText(underIndented);
+    await flushRunUpdate();
+
+    expect(screen.getByTestId("indent-hint-overlay")).toBeInTheDocument();
+    expect(document.querySelectorAll(".indent-hint-line.needs-indent").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText(/1 of 3 parts/i)).toBeInTheDocument();
   });
 });
 
@@ -422,8 +478,10 @@ function beginRun() {
 
 function completeActiveText(text: string) {
   const editor = screen.getByTestId("editable-surface");
-  editor.textContent = text;
-  fireEvent.input(editor);
+  act(() => {
+    editor.textContent = text;
+    fireEvent.input(editor);
+  });
 }
 
 function activeTargetText() {
@@ -447,28 +505,30 @@ async function completeCurrentDrill() {
     completeActiveText([...words.slice(0, 2), ...words.slice(3)].join(" "));
   } else if (prompt.includes("delete the next word")) {
     completeActiveText([words[0], ...words.slice(2)].join(" "));
-  } else if (prompt.includes("move to the previous word")) {
+  } else if (prompt.includes("move to the previous word") || prompt.includes("move the caret to the start")) {
     beginRun();
     setSelectionRange(editor, words[0].length + 1);
     await dispatchSelectionChange();
-  } else if (prompt.includes("move to the next word")) {
+  } else if (prompt.includes("move to the next word") || prompt.includes("move the caret to the end")) {
     beginRun();
     setSelectionRange(editor, words[0].length);
     await dispatchSelectionChange();
-  } else if (prompt.includes("select the previous word")) {
+  } else if (prompt.includes("select the previous word") || prompt.includes("select the final word")) {
     beginRun();
     const selected = words.at(-1) ?? "";
     const start = (editor.textContent ?? "").length - selected.length;
     setSelectionRange(editor, start, start + selected.length);
     await dispatchSelectionChange();
-  } else if (prompt.includes("replace the current word")) {
-    completeActiveText("Use a clear label.");
-    setSelectionRange(editor, 6, 11);
-    await dispatchSelectionChange();
-  } else if (prompt.includes("insert punctuation")) {
-    completeActiveText("Pause here, then continue.");
-    setSelectionRange(editor, 10);
-    await dispatchSelectionChange();
+  } else if (prompt.includes("replace the current word") || prompt.includes("replace the selected word") || prompt.startsWith("replace \"")) {
+    const replacement = prompt.match(/with "([^"]+)"/)?.[1];
+    const selected = prompt.match(/replace "([^"]+)"/)?.[1] ?? prompt.match(/selected word "([^"]+)"/)?.[1] ?? words[1];
+    if (!replacement) throw new Error(`Missing replacement in drill prompt: ${prompt}`);
+    completeActiveText((editor.textContent ?? "").replace(selected, replacement));
+  } else if (prompt.includes("insert punctuation") || prompt.includes("insert a comma")) {
+    const anchor = prompt.match(/after "([^"]+)"/)?.[1] ?? words[1];
+    const text = editor.textContent ?? "";
+    const index = text.indexOf(anchor) + anchor.length;
+    completeActiveText(`${text.slice(0, index)},${text.slice(index)}`);
   } else {
     throw new Error(`Unhandled drill prompt: ${prompt}`);
   }
@@ -483,6 +543,15 @@ async function dispatchSelectionChange() {
 
 async function flushRunUpdate() {
   await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  await act(async () => {
+    vi.advanceTimersByTime(300);
+  });
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
   });
