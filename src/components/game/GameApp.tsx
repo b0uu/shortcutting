@@ -21,6 +21,7 @@ import { formatElapsed } from "@/domain/timer";
 import { validateChallenge } from "@/domain/validation";
 import type {
   Challenge,
+  ChallengeCount,
   ChallengeResult,
   EditEvent,
   Mode,
@@ -43,6 +44,9 @@ import { ProgressPips } from "./ProgressPips";
 
 type Phase = "pre-test" | "active" | "complete";
 
+const defaultPartCounts: ChallengeCount[] = [3, 4];
+const drillPartCounts: ChallengeCount[] = [5, 10, 15];
+
 type ChallengeStats = {
   hintsUsed: number;
   mouseActions: number;
@@ -61,9 +65,10 @@ const defaultStats: ChallengeStats = {
   redoCount: 0,
 };
 
-const SCREEN_CROSSFADE_MS = 180;
 const COMPLETION_FEEDBACK_MS = 260;
 const COMPLETION_FLASH_MS = 1200;
+const QUICK_CROSSFADE_MS = 35;
+const RESULTS_CROSSFADE_MS = 220;
 
 const defaultConfig: TestConfig = {
   mode: "target-match",
@@ -139,7 +144,7 @@ export function GameApp() {
   useEffect(() => {
     const detected = detectPlatform(navigator.userAgent, navigator.platform);
     const merged = loadSettings(defaultConfig, detected);
-    const liveConfig = withFreshSeed(merged);
+    const liveConfig = normalizeChallengeCountForMode(withFreshSeed(merged));
     // Local settings must hydrate once from localStorage before the user starts a run.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setConfig(liveConfig);
@@ -227,7 +232,7 @@ export function GameApp() {
         return;
       }
 
-      if (!settingsOpen && config.mode === "drill" && phase !== "complete" && isAltShortcut(event) && event.key.toLowerCase() === "r") {
+      if (!settingsOpen && config.mode === "drill" && phase !== "complete" && isAltShortcut(event) && getSiteShortcutKey(event) === "r") {
         event.preventDefault();
         resetCurrentDrill();
         return;
@@ -237,7 +242,7 @@ export function GameApp() {
         return;
       }
 
-      const key = event.key.toLowerCase();
+      const key = getSiteShortcutKey(event);
       if (key === "1") {
         event.preventDefault();
         changeMode("target-match");
@@ -306,13 +311,13 @@ export function GameApp() {
     const shouldFreshenSeed = patch.seedPack === undefined
       && patch.practiceSkillPack === undefined
       && (patch.mode !== undefined || patch.difficulty !== undefined || patch.challengeCount !== undefined);
-    const nextConfig = {
+    const nextConfig = normalizeChallengeCountForMode({
       ...config,
       ...patch,
       platform: resolvePlatform(nextPreference, detected),
       practiceSkillPack: shouldClearPracticeFocus ? null : (patch.practiceSkillPack ?? config.practiceSkillPack ?? null),
       seedPack: patch.seedPack ?? (shouldFreshenSeed ? freshSeedPack() : config.seedPack),
-    };
+    });
     if (shouldCrossfadePreview(patch)) {
       crossfadeToConfig(nextConfig);
     } else {
@@ -374,6 +379,10 @@ export function GameApp() {
 
   function handleEditorKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     if (!active) return;
+    if (isSiteShortcut(event)) {
+      event.preventDefault();
+      return;
+    }
     if (phaseRef.current === "pre-test" && !isRunStartingEditorKey(event)) return;
     startRunFromEditorInput();
     hideHintImmediately();
@@ -600,7 +609,7 @@ export function GameApp() {
   }
 
   function playAgain() {
-    crossfadeToConfig(withFreshSeed(config));
+    crossfadeToConfig(withFreshSeed(config), RESULTS_CROSSFADE_MS);
   }
 
   function resetWithFreshSeed() {
@@ -610,7 +619,7 @@ export function GameApp() {
     resetPreview(nextConfig);
   }
 
-  function crossfadeToConfig(nextConfig: TestConfig) {
+  function crossfadeToConfig(nextConfig: TestConfig, durationMs = QUICK_CROSSFADE_MS) {
     setScreenFading(true);
     if (screenFadeTimeout.current) window.clearTimeout(screenFadeTimeout.current);
     setConfig(nextConfig);
@@ -619,7 +628,7 @@ export function GameApp() {
     screenFadeTimeout.current = window.setTimeout(() => {
       setScreenFading(false);
       screenFadeTimeout.current = null;
-    }, SCREEN_CROSSFADE_MS);
+    }, durationMs);
   }
 
   function practiceAgain(suggestion: PracticeSuggestion) {
@@ -629,7 +638,7 @@ export function GameApp() {
       difficulty: suggestion.mode === "drill" ? "standard" : suggestion.difficulty,
       seedPack: suggestion.seedPack,
       practiceSkillPack: suggestion.skillPack,
-    });
+    }, RESULTS_CROSSFADE_MS);
   }
 
   function openSettings() {
@@ -1012,6 +1021,13 @@ function shouldCrossfadePreview(patch: Partial<TestConfig>): boolean {
     || patch.seedPack !== undefined;
 }
 
+function normalizeChallengeCountForMode(config: TestConfig): TestConfig {
+  if (config.mode === "drill") {
+    return drillPartCounts.includes(config.challengeCount) ? config : { ...config, challengeCount: 5 };
+  }
+  return defaultPartCounts.includes(config.challengeCount) ? config : { ...config, challengeCount: 3 };
+}
+
 function initialSelection(challenge: Challenge): SelectionState {
   return challenge.drill?.initialSelection ?? {
     start: challenge.editableText.length,
@@ -1042,8 +1058,36 @@ function isRunStartingEditorKey(event: React.KeyboardEvent<HTMLDivElement>): boo
     || event.key === "Delete";
 }
 
-function isAltShortcut(event: KeyboardEvent): boolean {
+type ShortcutKeyEvent = Pick<KeyboardEvent | React.KeyboardEvent, "altKey" | "ctrlKey" | "metaKey" | "shiftKey" | "key" | "code">;
+
+function isAltShortcut(event: ShortcutKeyEvent): boolean {
   return event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
+}
+
+function isSiteShortcut(event: ShortcutKeyEvent): boolean {
+  if (!isAltShortcut(event)) return false;
+  return getSiteShortcutKey(event) !== null;
+}
+
+function getSiteShortcutKey(event: ShortcutKeyEvent): "1" | "2" | "3" | "h" | "y" | "r" | null {
+  const keyFromCode = shortcutKeyFromCode(event.code);
+  if (keyFromCode) return keyFromCode;
+
+  const key = event.key.toLowerCase();
+  if (key === "1" || key === "2" || key === "3" || key === "h" || key === "y" || key === "r") {
+    return key;
+  }
+  return null;
+}
+
+function shortcutKeyFromCode(code: string): "1" | "2" | "3" | "h" | "y" | "r" | null {
+  if (code === "Digit1") return "1";
+  if (code === "Digit2") return "2";
+  if (code === "Digit3") return "3";
+  if (code === "KeyH") return "h";
+  if (code === "KeyY") return "y";
+  if (code === "KeyR") return "r";
+  return null;
 }
 
 function playCompleteSound(enabled: boolean) {

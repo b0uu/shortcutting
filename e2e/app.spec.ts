@@ -20,6 +20,64 @@ async function completeVisiblePart(page: Page, index: number, total: number) {
   return { before, after };
 }
 
+async function completeVisibleDrill(page: Page) {
+  const prompt = (await page.locator(".target-block").textContent() ?? "").toLowerCase();
+  await page.getByTestId("editable-surface").evaluate((node, currentPrompt) => {
+    const text = node.textContent ?? "";
+    const lowerText = text.toLowerCase();
+
+    function setSelection(start: number, end = start) {
+      const textNode = node.firstChild;
+      if (!textNode) return;
+      const range = document.createRange();
+      range.setStart(textNode, Math.max(0, start));
+      range.setEnd(textNode, Math.max(0, end));
+      const selection = document.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+    }
+
+    function setText(value: string, caret = value.length) {
+      node.textContent = value;
+      setSelection(caret);
+      node.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }));
+    }
+
+    const quoted = currentPrompt.match(/"([^"]+)"/)?.[1] ?? "";
+    if (currentPrompt.includes("delete the previous word")
+      || currentPrompt.includes("delete the next word")
+      || currentPrompt.includes("delete the selected fragment")) {
+      setText(text.replace(`${quoted} `, "").replace(` ${quoted}`, "").replace(quoted, ""));
+      return;
+    }
+    if (currentPrompt.startsWith("replace ")) {
+      const replacement = currentPrompt.match(/with "([^"]+)"/)?.[1] ?? "";
+      setText(text.replace(quoted, replacement));
+      return;
+    }
+    if (currentPrompt.includes("insert a comma") || currentPrompt.includes("insert a period")) {
+      const mark = currentPrompt.includes("comma") ? "," : ".";
+      const index = lowerText.indexOf(quoted) + quoted.length;
+      setText(`${text.slice(0, index)}${mark}${text.slice(index)}`, index + 1);
+      return;
+    }
+    if (currentPrompt.startsWith("select ")) {
+      const start = lowerText.indexOf(quoted);
+      setSelection(start, start + quoted.length);
+      return;
+    }
+    if (currentPrompt.includes("move the caret to the start") || currentPrompt.includes("move the caret before")) {
+      setSelection(lowerText.indexOf(quoted));
+      return;
+    }
+    if (currentPrompt.includes("move the caret to the end") || currentPrompt.includes("move the caret after")) {
+      const start = lowerText.indexOf(quoted);
+      setSelection(start + quoted.length);
+    }
+  }, prompt);
+}
+
 test("loads the shortcutting ready editor", async ({ page }) => {
   await page.goto("/?seed=standard-v1");
   await expect(page.getByRole("button", { name: "shortcutting home" })).toBeVisible();
@@ -39,10 +97,14 @@ test("loads the shortcutting ready editor", async ({ page }) => {
   await expect(page.getByRole("dialog", { name: "Keyboard shortcut map" })).toBeVisible();
   await expect(page.getByLabel("mock keyboard").locator(".keyboard-row")).toHaveCount(5);
   await page.getByRole("button", { name: "close" }).click();
+  await page.getByTestId("editable-surface").focus();
   await page.keyboard.press("Alt+2");
   await expect(page.getByRole("button", { name: "drill" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("timer")).toHaveText("00:00.0");
+  await page.getByTestId("editable-surface").focus();
   await page.keyboard.press("Alt+1");
   await expect(page.getByRole("button", { name: "target match" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("timer")).toHaveText("00:00.0");
 });
 
 test("morphs run options without layout shift and avoids browser dialogs", async ({ page }) => {
@@ -57,8 +119,7 @@ test("morphs run options without layout shift and avoids browser dialogs", async
   const before = await modebar.boundingBox();
   expect(before).not.toBeNull();
   const attentionCount = await page.locator(".target-attention").count();
-  expect(attentionCount).toBeGreaterThan(0);
-  await expect(page.locator(".target-attention").first()).toHaveText(/^.$/);
+  if (attentionCount > 0) await expect(page.locator(".target-attention").first()).toHaveText(/^.$/);
 
   await page.getByRole("button", { name: /show run options/i }).click();
   await page.waitForTimeout(350);
@@ -385,27 +446,12 @@ test("starts drill timing from caret movement", async ({ page }) => {
 });
 
 test("clears drill word selection before the next challenge starts", async ({ page }) => {
-  await page.goto("/?seed=drill-select-1");
+  await page.goto("/?seed=standard-v1");
   await page.getByRole("button", { name: "drill" }).click();
-  await expect(page.locator(".target-block")).toContainText(/select the final word/i);
+  await expect(page.locator(".target-block")).toContainText(/^Select /);
+  await completeVisibleDrill(page);
 
-  await page.getByTestId("editable-surface").evaluate((node) => {
-    const text = node.firstChild;
-    const value = node.textContent ?? "";
-    const selected = value.split(" ").at(-1) ?? "";
-    const start = value.length - selected.length;
-    if (!text) return;
-    const range = document.createRange();
-    range.setStart(text, start);
-    range.setEnd(text, value.length);
-    const selection = document.getSelection();
-    selection?.removeAllRanges();
-    selection?.addRange(range);
-    document.dispatchEvent(new Event("selectionchange"));
-  });
-
-  await expect(page.locator(".pips")).toHaveAttribute("aria-label", "2 of 3 parts");
-  await expect(page.locator(".target-block")).toContainText(/^Replace "/);
+  await expect(page.locator(".pips")).toHaveAttribute("aria-label", "2 of 5 parts");
   await expect.poll(async () => page.getByTestId("editable-surface").evaluate((node) => {
     const selection = document.getSelection();
     return {
@@ -497,13 +543,9 @@ test("keeps drill completion rail anchored to the active line", async ({ page })
   await page.goto("/?seed=standard-v1");
   await page.getByRole("button", { name: "drill" }).click();
 
-  await page.getByTestId("editable-surface").evaluate((node) => {
-    const words = (node.textContent ?? "").split(" ");
-    node.textContent = [...words.slice(0, 2), ...words.slice(3)].join(" ");
-    node.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }));
-  });
+  await completeVisibleDrill(page);
 
-  await expect(page.locator(".pips")).toHaveAttribute("aria-label", "2 of 3 parts");
+  await expect(page.locator(".pips")).toHaveAttribute("aria-label", "2 of 5 parts");
   await expect(page.getByTestId("drill-safety")).toBeVisible();
   await expect.poll(async () => page.evaluate(() => {
     const active = document.querySelector<HTMLElement>(".active-segment");

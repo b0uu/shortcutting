@@ -1,6 +1,7 @@
 import type { Challenge, ChallengeErrorType, DrillDefinition, Platform, SkillPack, SkillTag } from "./types";
 import {
   attentionRanges,
+  chooseVariedFactories,
   createRng,
   generateWithRetry,
   qualityIssues,
@@ -9,9 +10,10 @@ import {
   wordPools,
   type GeneratedRecipe,
   type GeneratorRng,
+  type VarietyFactoryMeta,
 } from "./generator";
 
-type DrillFactory = {
+type DrillFactory = VarietyFactoryMeta & {
   id: DrillDefinition["id"];
   instruction: string;
   skillPacks: SkillPack[];
@@ -30,6 +32,12 @@ type GeneratedDrillRecipe = GeneratedRecipe & {
 const drillFactories: DrillFactory[] = [
   {
     id: "delete-previous-word",
+    shape: "delete-word",
+    primarySkill: "word-deletion",
+    shortcutFamily: "delete-word",
+    density: 1,
+    visualShape: "short-line",
+    weight: 2,
     instruction: "Delete the previous word.",
     skillPacks: ["deletion-cleanup", "word-movement"],
     skillTags: ["word-deletion", "word-navigation"],
@@ -58,6 +66,12 @@ const drillFactories: DrillFactory[] = [
   },
   {
     id: "delete-next-word",
+    shape: "delete-word",
+    primarySkill: "word-deletion",
+    shortcutFamily: "delete-word",
+    density: 1,
+    visualShape: "short-line",
+    weight: 2,
     instruction: "Delete the next word.",
     skillPacks: ["deletion-cleanup", "word-movement"],
     skillTags: ["word-deletion", "word-navigation"],
@@ -86,6 +100,12 @@ const drillFactories: DrillFactory[] = [
   },
   {
     id: "move-previous-word",
+    shape: "cursor",
+    primarySkill: "word-navigation",
+    shortcutFamily: "word-move",
+    density: 1,
+    visualShape: "cursor-only",
+    weight: 2,
     instruction: "Move to the previous word.",
     skillPacks: ["word-movement"],
     skillTags: ["word-navigation"],
@@ -112,6 +132,12 @@ const drillFactories: DrillFactory[] = [
   },
   {
     id: "move-next-word",
+    shape: "cursor",
+    primarySkill: "word-navigation",
+    shortcutFamily: "word-move",
+    density: 1,
+    visualShape: "cursor-only",
+    weight: 2,
     instruction: "Move to the next word.",
     skillPacks: ["word-movement"],
     skillTags: ["word-navigation"],
@@ -137,7 +163,46 @@ const drillFactories: DrillFactory[] = [
     },
   },
   {
+    id: "move-character",
+    shape: "cursor",
+    primarySkill: "character-navigation",
+    shortcutFamily: "character-move",
+    density: 1,
+    visualShape: "cursor-only",
+    weight: 1.4,
+    instruction: "Move one character.",
+    skillPacks: ["word-movement"],
+    skillTags: ["character-navigation"],
+    intendedShortcutPath: ["move caret one character"],
+    attention: ["character"],
+    hintByPlatform: {
+      mac: "Use Left or Right Arrow.",
+      "windows-linux": "Use Left or Right Arrow.",
+    },
+    build: (rng) => {
+      const words = uniqueWords(rng, 3);
+      const text = words.join(" ");
+      const finalWord = words.at(-1) ?? "";
+      const expectedIndex = text.length - 1;
+      return drillRecipe("move-character", `Move the caret one character left, before the final letter in "${finalWord}".`, text, text, {
+        validation: { type: "cursor", expectedIndex },
+        initialSelection: { start: text.length, end: text.length },
+        skillPacks: ["word-movement"],
+        skillTags: ["character-navigation"],
+        intendedShortcutPath: ["move caret one character"],
+        attention: [{ text: finalWord, reason: "character landing point", skillTags: ["character-navigation"] }],
+        errors: [{ type: "wrong-character-order", skillTags: ["character-navigation"] }],
+      });
+    },
+  },
+  {
     id: "select-previous-word",
+    shape: "selection",
+    primarySkill: "selection",
+    shortcutFamily: "word-select",
+    density: 2,
+    visualShape: "short-line",
+    weight: 2,
     instruction: "Select the previous word.",
     skillPacks: ["selection-practice", "word-movement"],
     skillTags: ["selection", "word-navigation"],
@@ -164,7 +229,80 @@ const drillFactories: DrillFactory[] = [
     },
   },
   {
+    id: "select-current-word",
+    shape: "selection",
+    primarySkill: "selection",
+    shortcutFamily: "word-select",
+    density: 2,
+    visualShape: "short-line",
+    weight: 1.6,
+    instruction: "Select the current word.",
+    skillPacks: ["selection-practice", "word-movement"],
+    skillTags: ["selection", "word-navigation"],
+    intendedShortcutPath: ["expand selection to current word"],
+    attention: ["current word"],
+    hintByPlatform: {
+      mac: "Use word selection around the caret.",
+      "windows-linux": "Use word selection around the caret.",
+    },
+    build: (rng) => {
+      const words = uniqueWords(rng, 4);
+      const text = words.join(" ");
+      const selectedIndex = rng.range(1, 2);
+      const expectedStart = words.slice(0, selectedIndex).join(" ").length + 1;
+      const selected = words[selectedIndex];
+      return drillRecipe("select-current-word", `Select "${selected}".`, text, text, {
+        validation: { type: "selection", expectedStart, expectedEnd: expectedStart + selected.length },
+        initialSelection: { start: expectedStart + 1, end: expectedStart + 1 },
+        skillPacks: ["selection-practice", "word-movement"],
+        skillTags: ["selection", "word-navigation"],
+        intendedShortcutPath: ["expand selection to current word"],
+        attention: [{ text: selected, reason: "current word to select", skillTags: ["selection"] }],
+        errors: [{ type: "wrong-character-order", skillTags: ["selection", "word-navigation"] }],
+      });
+    },
+  },
+  {
+    id: "select-line",
+    shape: "selection",
+    primarySkill: "line-navigation",
+    shortcutFamily: "line-select",
+    density: 2,
+    visualShape: "two-line",
+    weight: 1.4,
+    instruction: "Select the current line.",
+    skillPacks: ["selection-practice", "line-reshaping"],
+    skillTags: ["selection", "line-navigation"],
+    intendedShortcutPath: ["select current line"],
+    attention: ["line"],
+    hintByPlatform: {
+      mac: "Use line selection around the caret.",
+      "windows-linux": "Use line selection around the caret.",
+    },
+    build: (rng) => {
+      const first = uniqueWords(rng, 3).join(" ");
+      const second = uniqueWords(rng, 3).join(" ");
+      const text = `${first}\n${second}`;
+      const lineStart = first.length + 1;
+      return drillRecipe("select-line", `Select the line: "${second}".`, text, text, {
+        validation: { type: "selection", expectedStart: lineStart, expectedEnd: text.length },
+        initialSelection: { start: lineStart + 1, end: lineStart + 1 },
+        skillPacks: ["selection-practice", "line-reshaping"],
+        skillTags: ["selection", "line-navigation"],
+        intendedShortcutPath: ["select current line"],
+        attention: [{ text: second, reason: "line to select", skillTags: ["selection", "line-navigation"] }],
+        errors: [{ type: "wrong-character-order", skillTags: ["selection", "line-navigation"] }],
+      });
+    },
+  },
+  {
     id: "replace-current-word",
+    shape: "replace",
+    primarySkill: "replacement",
+    shortcutFamily: "replace-word",
+    density: 2,
+    visualShape: "short-line",
+    weight: 2,
     instruction: "Replace the marked word.",
     skillPacks: ["selection-practice", "deletion-cleanup"],
     skillTags: ["selection", "replacement"],
@@ -194,7 +332,47 @@ const drillFactories: DrillFactory[] = [
     },
   },
   {
+    id: "delete-selected-fragment",
+    shape: "delete-word",
+    primarySkill: "character-deletion",
+    shortcutFamily: "selection-delete",
+    density: 2,
+    visualShape: "short-line",
+    weight: 1.4,
+    instruction: "Delete the selected fragment.",
+    skillPacks: ["deletion-cleanup", "selection-practice"],
+    skillTags: ["character-deletion", "selection"],
+    intendedShortcutPath: ["delete current selection"],
+    attention: ["selected fragment"],
+    hintByPlatform: {
+      mac: "Press Backspace or Delete to remove the selection.",
+      "windows-linux": "Press Backspace or Delete to remove the selection.",
+    },
+    build: (rng) => {
+      const words = uniqueWords(rng, 4);
+      const extra = rng.pick(wordPools.tiny);
+      const editableText = `${words[0]} ${words[1]} ${extra} ${words[2]} ${words[3]}`;
+      const targetText = `${words[0]} ${words[1]} ${words[2]} ${words[3]}`;
+      const start = `${words[0]} ${words[1]} `.length;
+      return drillRecipe("delete-selected-fragment", `Delete the selected fragment: "${extra}".`, editableText, targetText, {
+        validation: { type: "text", expectedText: targetText },
+        initialSelection: { start, end: start + extra.length + 1 },
+        skillPacks: ["deletion-cleanup", "selection-practice"],
+        skillTags: ["character-deletion", "selection"],
+        intendedShortcutPath: ["delete current selection"],
+        attention: [{ text: words[2], reason: "text after selected-fragment deletion", skillTags: ["character-deletion", "selection"] }],
+        errors: [{ type: "extra-word", skillTags: ["character-deletion", "selection"] }],
+      });
+    },
+  },
+  {
     id: "insert-punctuation",
+    shape: "character-edit",
+    primarySkill: "punctuation-insertion",
+    shortcutFamily: "punctuation",
+    density: 1,
+    visualShape: "short-line",
+    weight: 2,
     instruction: "Insert punctuation at the target position.",
     skillPacks: ["punctuation-casing"],
     skillTags: ["punctuation-insertion", "character-navigation"],
@@ -221,15 +399,54 @@ const drillFactories: DrillFactory[] = [
       });
     },
   },
+  {
+    id: "insert-period-and-stay",
+    shape: "character-edit",
+    primarySkill: "punctuation-insertion",
+    shortcutFamily: "punctuation-cursor",
+    density: 2,
+    visualShape: "short-line",
+    weight: 1.4,
+    instruction: "Insert punctuation and keep position.",
+    skillPacks: ["punctuation-casing", "word-movement"],
+    skillTags: ["punctuation-insertion", "character-navigation"],
+    intendedShortcutPath: ["move to sentence end", "insert period"],
+    attention: ["period"],
+    hintByPlatform: {
+      mac: "Insert the period at the target boundary.",
+      "windows-linux": "Insert the period at the target boundary.",
+    },
+    build: (rng) => {
+      const words = uniqueWords(rng, 4);
+      const editableText = words.join(" ");
+      const insertionWord = words[1];
+      const insertionIndex = `${words[0]} ${insertionWord}`.length;
+      const targetText = `${editableText.slice(0, insertionIndex)}.${editableText.slice(insertionIndex)}`;
+      const expectedIndex = insertionIndex + 1;
+      return drillRecipe("insert-period-and-stay", `Insert a period after "${insertionWord}".`, editableText, targetText, {
+        validation: { type: "text+cursor", expectedText: targetText, expectedIndex },
+        initialSelection: { start: editableText.length, end: editableText.length },
+        skillPacks: ["punctuation-casing", "word-movement"],
+        skillTags: ["punctuation-insertion", "character-navigation"],
+        intendedShortcutPath: ["move to punctuation position", "insert period"],
+        attention: [{ text: `${insertionWord}.`, reason: "period insertion point", skillTags: ["punctuation-insertion"] }],
+        errors: [{ type: "missing-period", skillTags: ["punctuation-insertion"] }],
+      });
+    },
+  },
 ];
 
 export function generateDrillChallenges(count: number, seed: string, skillPack?: SkillPack): Challenge[] {
   const factories = filterDrillDefinitions(skillPack);
   const hasFocusedPack = skillPack ? drillFactories.some((drill) => drill.skillPacks.includes(skillPack)) : false;
   const seedSkillPack = hasFocusedPack ? skillPack : undefined;
-  const start = seed === "standard-v1" ? 0 : createRng(`${seed}:drill-order:${seedSkillPack ?? "all"}`).int(factories.length);
+  const selectedFactories = chooseVariedFactories(
+    factories,
+    count,
+    `${seed}:drill-variety:${seedSkillPack ?? "all"}`,
+  );
   return Array.from({ length: count }, (_, index) => {
-    const factory = factories[(start + index) % factories.length];
+    const factory = selectedFactories[index];
     const recipeSeed = `${seed}:drill:${seedSkillPack ?? "all"}:${index + 1}:${factory.id}`;
     const recipe = generateWithRetry(
       recipeSeed,
@@ -282,7 +499,7 @@ function drillRecipe(
         "windows-linux": "Use the matching shortcut.",
       },
       validation: options.validation,
-      initialSelection: options.initialSelection,
+      initialSelection: id === "delete-next-word" ? options.initialSelection : { start: editableText.length, end: editableText.length },
     },
   };
 }

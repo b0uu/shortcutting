@@ -34,6 +34,15 @@ describe("generateTargetChallenges", () => {
     }
   });
 
+  it("keeps standard target runs varied beyond capitalization and final periods", () => {
+    const generated = generateTargetChallenges(8, "standard-v1");
+    const targets = generated.map((challenge) => challenge.targetText);
+
+    expect(targets.some((target) => !target.endsWith("."))).toBe(true);
+    expect(targets.filter((target) => /^[A-Z]/.test(target)).length).toBeLessThan(targets.length);
+    expect(generated.some((challenge) => challenge.errors.some((error) => error.type === "extra-word" || error.type === "wrong-word" || error.type === "double-space"))).toBe(true);
+  });
+
   it("filters deterministic pools by difficulty and skill pack", () => {
     const advanced = generateTargetChallenges(2, "standard-v1", { difficulty: "advanced" });
     expect(advanced.every((challenge) => challenge.difficulty === "advanced")).toBe(true);

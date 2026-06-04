@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import type { Difficulty, Mode, TestConfig } from "@/domain/types";
+import type { ChallengeCount, Difficulty, Mode, TestConfig } from "@/domain/types";
 import { ShortcutHint } from "@/components/ui/ShortcutHint";
 
 type ModeBarProps = {
@@ -10,11 +10,14 @@ type ModeBarProps = {
 };
 
 const difficultyOptions: Difficulty[] = ["standard", "advanced", "multiline"];
+const defaultPartOptions: ChallengeCount[] = [3, 4];
+const drillPartOptions: ChallengeCount[] = [5, 10, 15];
 
 export function ModeBar({ config, hidden, onModeChange, onConfigChange }: ModeBarProps) {
   const [optionsOpen, setOptionsOpen] = useState(false);
   const modifier = config.platform === "mac" ? "⌥" : "alt";
   const difficultyLocked = config.mode === "drill";
+  const partOptions = difficultyLocked ? drillPartOptions : defaultPartOptions;
 
   return (
     <div className={`modebar ${hidden ? "modebar-placeholder" : ""}`} aria-hidden={hidden ? true : undefined}>
@@ -46,7 +49,7 @@ export function ModeBar({ config, hidden, onModeChange, onConfigChange }: ModeBa
           <div className="mode-options-panel" id="run-options-panel" aria-hidden={optionsOpen ? undefined : true}>
             <div className="mini-segment" aria-label={optionsOpen ? "part count" : undefined}>
               <span className="segment-label">parts</span>
-              {[3, 4].map((count) => (
+              {partOptions.map((count) => (
                 <button
                   key={count}
                   type="button"
@@ -54,7 +57,7 @@ export function ModeBar({ config, hidden, onModeChange, onConfigChange }: ModeBa
                   className={config.challengeCount === count ? "active" : ""}
                   disabled={hidden || !optionsOpen}
                   tabIndex={optionsOpen ? 0 : -1}
-                  onClick={() => onConfigChange({ challengeCount: count as 3 | 4 })}
+                  onClick={() => onConfigChange({ challengeCount: count })}
                 >
                   {count}
                 </button>

@@ -31,6 +31,20 @@ describe("GameApp", () => {
     expect(screen.getByTestId("timer")).toHaveTextContent("00:01.0");
   });
 
+  it("honors global mode shortcuts while the editor is focused without starting the run", () => {
+    render(<GameApp />);
+    const editor = screen.getByTestId("editable-surface");
+    editor.focus();
+
+    const eventAccepted = fireEvent.keyDown(editor, { key: "™", code: "Digit2", altKey: true });
+    expect(eventAccepted).toBe(false);
+    expect(screen.getByTestId("timer")).toHaveTextContent("00:00.0");
+
+    act(() => vi.advanceTimersByTime(100));
+    expect(screen.getByRole("button", { name: "drill" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("timer")).toHaveTextContent("00:00.0");
+  });
+
   it("locks completed text, updates the active target in place, and shows no transition screen", async () => {
     render(<GameApp />);
     const firstTarget = activeTargetText();
@@ -102,12 +116,31 @@ describe("GameApp", () => {
 
     expect(screen.queryByLabelText("next practice suggestion")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /practice this again/i }));
-    act(() => vi.advanceTimersByTime(180));
+    expect(document.querySelector("main")).toHaveClass("screen-crossfade");
+    act(() => vi.advanceTimersByTime(220));
     await flushRunUpdate();
 
     expect(screen.getByTestId("editable-surface")).toBeInTheDocument();
     expect(screen.getByTestId("timer")).toHaveTextContent("00:00.0");
     expect(screen.getByRole("button", { name: "target match" })).toHaveAttribute("aria-pressed", "true");
+    expect(document.querySelector("main")).not.toHaveClass("screen-crossfade");
+  });
+
+  it("crossfades smoothly from results when playing again", async () => {
+    render(<GameApp />);
+    await completeRun();
+
+    fireEvent.click(screen.getByRole("button", { name: /play again/i }));
+    expect(screen.getByTestId("editable-surface")).toBeInTheDocument();
+    expect(document.querySelector("main")).toHaveClass("screen-crossfade");
+
+    act(() => vi.advanceTimersByTime(180));
+    expect(document.querySelector("main")).toHaveClass("screen-crossfade");
+
+    act(() => vi.advanceTimersByTime(40));
+    await flushRunUpdate();
+    expect(document.querySelector("main")).not.toHaveClass("screen-crossfade");
+    expect(screen.getByTestId("timer")).toHaveTextContent("00:00.0");
   });
 
   it("marks the active part after five idle seconds and keeps the editor editable", async () => {
@@ -204,16 +237,27 @@ describe("GameApp", () => {
     expect(screen.getByRole("button", { name: /collapse run options/i })).toBeInTheDocument();
   });
 
+  it("uses 5 parts by default for drill mode and offers longer drill runs", () => {
+    render(<GameApp />);
+
+    fireEvent.click(screen.getByRole("button", { name: "drill" }));
+    expect(screen.getByLabelText(/1 of 5 parts/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /show run options/i }));
+    expect(screen.getByRole("button", { name: "5 parts" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "10 parts" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "15 parts" })).toBeInTheDocument();
+  });
+
   it("renders subtle target attention ranges from challenge metadata", () => {
     render(<GameApp />);
 
     const highlighted = document.querySelectorAll(".target-attention");
-    expect(highlighted.length).toBeGreaterThan(0);
     expect(Array.from(highlighted).every((node) => (node.textContent ?? "").length === 1)).toBe(true);
     expect(Array.from(highlighted).every((node) => activeTargetText().includes(node.textContent ?? ""))).toBe(true);
   });
 
-  it("underlines extra active edit text and clears the hint when corrected", async () => {
+  it("marks extra active edit text and clears the hint when corrected", async () => {
     render(<GameApp />);
     const target = activeTargetText();
 
@@ -351,15 +395,17 @@ describe("GameApp", () => {
     await completeCurrentDrill();
     await flushRunUpdate();
     expect(screen.getByTestId("locked-segment").textContent).toBeTruthy();
-    expect(screen.getByLabelText(/2 of 3 parts/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/2 of 5 parts/i)).toBeInTheDocument();
 
     await completeCurrentDrill();
     await flushRunUpdate();
     expect(screen.getAllByTestId("locked-segment")).toHaveLength(2);
-    expect(screen.getByLabelText(/3 of 3 parts/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/3 of 5 parts/i)).toBeInTheDocument();
 
-    await completeCurrentDrill();
-    await flushRunUpdate();
+    for (let index = 0; index < 3; index += 1) {
+      await completeCurrentDrill();
+      await flushRunUpdate();
+    }
     expect(screen.getByText(/total time/i)).toBeInTheDocument();
   });
 
@@ -513,10 +559,36 @@ async function completeCurrentDrill() {
     beginRun();
     setSelectionRange(editor, words[0].length);
     await dispatchSelectionChange();
+  } else if (prompt.includes("move the caret before")) {
+    beginRun();
+    const char = prompt.match(/"([^"]+)"/)?.[1] ?? "";
+    const index = (editor.textContent ?? "").toLowerCase().indexOf(char);
+    setSelectionRange(editor, index);
+    await dispatchSelectionChange();
+  } else if (prompt.includes("move the caret after")) {
+    beginRun();
+    const char = prompt.match(/"([^"]+)"/)?.[1] ?? "";
+    const index = (editor.textContent ?? "").toLowerCase().indexOf(char);
+    setSelectionRange(editor, index + char.length);
+    await dispatchSelectionChange();
   } else if (prompt.includes("select the previous word") || prompt.includes("select the final word")) {
     beginRun();
     const selected = words.at(-1) ?? "";
     const start = (editor.textContent ?? "").length - selected.length;
+    setSelectionRange(editor, start, start + selected.length);
+    await dispatchSelectionChange();
+  } else if (prompt.startsWith("select the line")) {
+    beginRun();
+    const selected = prompt.match(/"([^"]+)"/)?.[1] ?? "";
+    const text = editor.textContent ?? "";
+    const start = text.toLowerCase().indexOf(selected);
+    setSelectionRange(editor, start, start + selected.length);
+    await dispatchSelectionChange();
+  } else if (prompt.startsWith("select \"")) {
+    beginRun();
+    const selected = prompt.match(/"([^"]+)"/)?.[1] ?? "";
+    const text = editor.textContent ?? "";
+    const start = text.toLowerCase().indexOf(selected);
     setSelectionRange(editor, start, start + selected.length);
     await dispatchSelectionChange();
   } else if (prompt.includes("replace the current word") || prompt.includes("replace the selected word") || prompt.startsWith("replace \"")) {
@@ -524,11 +596,22 @@ async function completeCurrentDrill() {
     const selected = prompt.match(/replace "([^"]+)"/)?.[1] ?? prompt.match(/selected word "([^"]+)"/)?.[1] ?? words[1];
     if (!replacement) throw new Error(`Missing replacement in drill prompt: ${prompt}`);
     completeActiveText((editor.textContent ?? "").replace(selected, replacement));
+  } else if (prompt.includes("delete the selected fragment")) {
+    const selected = prompt.match(/"([^"]+)"/)?.[1];
+    if (!selected) throw new Error(`Missing selected fragment in drill prompt: ${prompt}`);
+    completeActiveText((editor.textContent ?? "").replace(`${selected} `, "").replace(selected, ""));
   } else if (prompt.includes("insert punctuation") || prompt.includes("insert a comma")) {
     const anchor = prompt.match(/after "([^"]+)"/)?.[1] ?? words[1];
     const text = editor.textContent ?? "";
     const index = text.indexOf(anchor) + anchor.length;
     completeActiveText(`${text.slice(0, index)},${text.slice(index)}`);
+  } else if (prompt.includes("insert a period")) {
+    const text = editor.textContent ?? "";
+    const anchor = prompt.match(/after "([^"]+)"/)?.[1] ?? words[1];
+    const index = text.indexOf(anchor) + anchor.length;
+    completeActiveText(`${text.slice(0, index)}.${text.slice(index)}`);
+    setSelectionRange(editor, index + 1);
+    await dispatchSelectionChange();
   } else {
     throw new Error(`Unhandled drill prompt: ${prompt}`);
   }

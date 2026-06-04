@@ -33,7 +33,7 @@ export function sanitizeConfig(
 
   return {
     mode: oneOf(input.mode, ["target-match", "drill", "coding"], fallback.mode),
-    challengeCount: oneOf(input.challengeCount, [3, 4], fallback.challengeCount),
+    challengeCount: oneOf(input.challengeCount, [3, 4, 5, 10, 15], fallback.challengeCount),
     platformPreference,
     platform: resolvePlatform(platformPreference, detectedPlatform),
     mousePolicy: oneOf(input.mousePolicy, ["keyboard-only", "mouse-allowed"], fallback.mousePolicy),

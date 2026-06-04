@@ -120,24 +120,36 @@ export function HistoryPanel({ open, logger, onClose }: HistoryPanelProps) {
           </div>
         </div>
         <div className="history-filters" aria-label="history filters">
-          <div>
-            <span className="history-filter-label">mode</span>
-            <div className="history-filter-options">
-              <FilterButton active={mode === "all"} onClick={() => { setClearArmed(false); setMode("all"); }}>all</FilterButton>
-              <FilterButton active={mode === "target-match"} onClick={() => { setClearArmed(false); setMode("target-match"); }}>target</FilterButton>
-              <FilterButton active={mode === "drill"} onClick={() => { setClearArmed(false); setMode("drill"); }}>drill</FilterButton>
-              <FilterButton active={mode === "coding"} onClick={() => { setClearArmed(false); setMode("coding"); }}>coding</FilterButton>
-            </div>
-          </div>
-          <div>
-            <span className="history-filter-label">difficulty</span>
-            <div className="history-filter-options">
-              <FilterButton active={difficulty === "all"} onClick={() => { setClearArmed(false); setDifficulty("all"); }}>all</FilterButton>
-              <FilterButton active={difficulty === "standard"} onClick={() => { setClearArmed(false); setDifficulty("standard"); }}>standard</FilterButton>
-              <FilterButton active={difficulty === "advanced"} onClick={() => { setClearArmed(false); setDifficulty("advanced"); }}>advanced</FilterButton>
-              <FilterButton active={difficulty === "multiline"} onClick={() => { setClearArmed(false); setDifficulty("multiline"); }}>multi-line</FilterButton>
-            </div>
-          </div>
+          <label className="history-filter-select">
+            <span>mode</span>
+            <select
+              value={mode}
+              onChange={(event) => {
+                setClearArmed(false);
+                setMode(event.target.value as FilterMode);
+              }}
+            >
+              <option value="all">all modes</option>
+              <option value="target-match">target match</option>
+              <option value="drill">drill</option>
+              <option value="coding">coding</option>
+            </select>
+          </label>
+          <label className="history-filter-select">
+            <span>difficulty</span>
+            <select
+              value={difficulty}
+              onChange={(event) => {
+                setClearArmed(false);
+                setDifficulty(event.target.value as FilterDifficulty);
+              }}
+            >
+              <option value="all">all difficulties</option>
+              <option value="standard">standard</option>
+              <option value="advanced">advanced</option>
+              <option value="multiline">multi-line</option>
+            </select>
+          </label>
         </div>
         <div className="history-bests" aria-label="personal bests">
           <span>personal bests</span>
@@ -218,14 +230,6 @@ export function HistoryPanel({ open, logger, onClose }: HistoryPanelProps) {
     </motion.div>
       )}
     </AnimatePresence>
-  );
-}
-
-function FilterButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button type="button" className={`opt-btn ${active ? "active" : ""}`} aria-pressed={active} onClick={onClick}>
-      {children}
-    </button>
   );
 }
 

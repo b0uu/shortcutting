@@ -3,25 +3,39 @@ import { filterDrillDefinitions, generateDrillChallenges, hintForDrill } from ".
 import { validateChallenge } from "./validation";
 
 describe("drills", () => {
-  it("generates the full MVP drill set with platform hints", () => {
-    const drills = generateDrillChallenges(7, "standard-v1");
-    expect(drills.map((challenge) => challenge.drill?.id)).toEqual([
+  it("generates a varied drill set with platform hints", () => {
+    const drillCount = filterDrillDefinitions().length;
+    const drills = generateDrillChallenges(drillCount, "standard-v1");
+    const ids = drills.map((challenge) => challenge.drill?.id);
+    expect(new Set(ids).size).toBe(drillCount);
+    expect(ids).toEqual(expect.arrayContaining([
       "delete-previous-word",
       "delete-next-word",
       "move-previous-word",
       "move-next-word",
       "select-previous-word",
+      "select-current-word",
+      "select-line",
       "replace-current-word",
+      "delete-selected-fragment",
       "insert-punctuation",
-    ]);
-    expect(hintForDrill(drills[0], "mac")).toContain("Option");
-    expect(hintForDrill(drills[0], "windows-linux")).toContain("Ctrl");
+      "insert-period-and-stay",
+    ]));
+    const deleteDrill = drills.find((challenge) => challenge.drill?.id === "delete-previous-word");
+    expect(deleteDrill).toBeTruthy();
+    expect(hintForDrill(deleteDrill!, "mac")).toContain("Option");
+    expect(hintForDrill(deleteDrill!, "windows-linux")).toContain("Ctrl");
     expect(drills.every((challenge) => challenge.intendedShortcutPath.length > 0)).toBe(true);
     expect(drills.every((challenge) => challenge.attentionRanges.length > 0)).toBe(true);
     expect(drills.every((challenge) => challenge.skillPacks.length > 0)).toBe(true);
     expect(drills.every((challenge) => challenge.estimatedCorrections > 0)).toBe(true);
-    expect(drills.every((challenge) => challenge.targetText.split(" ").length >= 3)).toBe(true);
-    expect(drills.every((challenge) => challenge.drill?.initialSelection?.start === challenge.drill?.initialSelection?.end)).toBe(true);
+    expect(drills.every((challenge) => challenge.targetText.split(/\s+/).length >= 3)).toBe(true);
+    expect(drills
+      .filter((challenge) => challenge.drill?.id !== "delete-next-word")
+      .every((challenge) => challenge.drill?.initialSelection?.start === challenge.editableText.length)).toBe(true);
+    expect(drills
+      .filter((challenge) => challenge.drill?.id !== "delete-next-word")
+      .every((challenge) => challenge.drill?.initialSelection?.end === challenge.editableText.length)).toBe(true);
   });
 
   it("keeps drill order deterministic by seed", () => {
@@ -45,7 +59,7 @@ describe("drills", () => {
   });
 
   it("validates every first-pass drill", () => {
-    const drills = generateDrillChallenges(7, "standard-v1");
+    const drills = generateDrillChallenges(filterDrillDefinitions().length, "standard-v1");
     for (const drill of drills) {
       const validation = drill.drill?.validation;
       expect(validation).toBeTruthy();
@@ -61,20 +75,46 @@ describe("drills", () => {
   });
 
   it("uses self-contained prompts that name the object and outcome", () => {
-    const drills = generateDrillChallenges(7, "standard-v1");
+    const drills = generateDrillChallenges(filterDrillDefinitions().length, "standard-v1");
     const promptById = new Map(drills.map((challenge) => [challenge.drill?.id, challenge.prompt]));
 
     expect(promptById.get("delete-previous-word")).toMatch(/^Delete the previous word: ".+"\.$/);
     expect(promptById.get("delete-next-word")).toMatch(/^Delete the next word: ".+"\.$/);
     expect(promptById.get("move-previous-word")).toMatch(/^Move the caret to the start of ".+"\.$/);
     expect(promptById.get("move-next-word")).toMatch(/^Move the caret to the end of ".+"\.$/);
+    expect(promptById.get("move-character")).toMatch(/^Move the caret one character left, before the final letter in ".+"\.$/);
     expect(promptById.get("select-previous-word")).toMatch(/^Select the final word: ".+"\.$/);
+    expect(promptById.get("select-current-word")).toMatch(/^Select ".+"\.$/);
+    expect(promptById.get("select-line")).toMatch(/^Select the line: ".+"\.$/);
     expect(promptById.get("replace-current-word")).toMatch(/^Replace ".+" with ".+"\.$/);
+    expect(promptById.get("delete-selected-fragment")).toMatch(/^Delete the selected fragment: ".+"\.$/);
     expect(promptById.get("insert-punctuation")).toMatch(/^Insert a comma after ".+"\.$/);
+    expect(promptById.get("insert-period-and-stay")).toMatch(/^Insert a period after ".+"\.$/);
+  });
+
+  it("does not use ambiguous bare characters as the character movement target", () => {
+    for (let index = 0; index < 20; index += 1) {
+      const drill = generateDrillChallenges(filterDrillDefinitions().length, `move-character-${index}`)
+        .find((challenge) => challenge.drill?.id === "move-character");
+      expect(drill?.prompt).toMatch(/^Move the caret one character left, before the final letter in "\w+"\.$/);
+      expect(drill?.prompt).not.toMatch(/^Move the caret (before|after) "\S"\.$/);
+    }
+  });
+
+  it("does not ask for punctuation at the current right-edge caret position", () => {
+    for (let index = 0; index < 20; index += 1) {
+      const drill = generateDrillChallenges(filterDrillDefinitions().length, `period-position-${index}`)
+        .find((challenge) => challenge.drill?.id === "insert-period-and-stay");
+      const validation = drill?.drill?.validation;
+      expect(validation?.type).toBe("text+cursor");
+      if (validation?.type !== "text+cursor" || !drill?.drill?.initialSelection) continue;
+      expect(validation.expectedIndex).toBeLessThan(validation.expectedText.length);
+      expect(drill.drill.initialSelection.start).not.toBe(validation.expectedIndex - 1);
+    }
   });
 
   it("keeps drill metadata complete for learning summaries", () => {
-    const drills = generateDrillChallenges(7, "standard-v1");
+    const drills = generateDrillChallenges(filterDrillDefinitions().length, "standard-v1");
 
     for (const drill of drills) {
       expect(drill.mode).toBe("drill");

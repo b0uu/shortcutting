@@ -1,13 +1,14 @@
 import type { Challenge, Difficulty, SkillPack } from "./types";
 import {
   attentionRanges,
+  chooseVariedFactories,
   createRng,
   type GeneratedRecipe,
   type GeneratorRng,
+  type VarietyFactoryMeta,
 } from "./generator";
 
-type PythonRecipeFactory = {
-  id: string;
+type PythonRecipeFactory = VarietyFactoryMeta & {
   difficulties: Difficulty[];
   skillPacks: SkillPack[];
   weight: number;
@@ -45,6 +46,11 @@ const pythonPools = {
 const pythonFactories: PythonRecipeFactory[] = [
   {
     id: "standard-assignment-spacing",
+    shape: "code-spacing",
+    primarySkill: "whitespace-correction",
+    shortcutFamily: "operator-spacing",
+    density: 1,
+    visualShape: "short-line",
     difficulties: ["standard"],
     skillPacks: ["code-cleanup"],
     weight: 3,
@@ -60,6 +66,11 @@ const pythonFactories: PythonRecipeFactory[] = [
   },
   {
     id: "standard-string-quotes",
+    shape: "wrap",
+    primarySkill: "selection",
+    shortcutFamily: "quote-wrap",
+    density: 1,
+    visualShape: "short-line",
     difficulties: ["standard"],
     skillPacks: ["code-cleanup", "string-cleanup", "selection-practice"],
     weight: 3,
@@ -75,6 +86,11 @@ const pythonFactories: PythonRecipeFactory[] = [
   },
   {
     id: "standard-call-parentheses",
+    shape: "code-wrap",
+    primarySkill: "punctuation-insertion",
+    shortcutFamily: "argument-wrap",
+    density: 1,
+    visualShape: "short-line",
     difficulties: ["standard"],
     skillPacks: ["code-cleanup", "argument-cleanup", "selection-practice"],
     weight: 3,
@@ -90,6 +106,11 @@ const pythonFactories: PythonRecipeFactory[] = [
   },
   {
     id: "standard-call-comma",
+    shape: "character-edit",
+    primarySkill: "punctuation-insertion",
+    shortcutFamily: "argument-separator",
+    density: 1,
+    visualShape: "short-line",
     difficulties: ["standard"],
     skillPacks: ["code-cleanup", "argument-cleanup"],
     weight: 2,
@@ -106,6 +127,11 @@ const pythonFactories: PythonRecipeFactory[] = [
   },
   {
     id: "standard-boolean-not",
+    shape: "code-boolean",
+    primarySkill: "replacement",
+    shortcutFamily: "boolean-insert",
+    density: 1,
+    visualShape: "short-line",
     difficulties: ["standard"],
     skillPacks: ["code-refactor-micro-edits", "boolean-cleanup", "simple-refactor"],
     weight: 2,
@@ -121,6 +147,11 @@ const pythonFactories: PythonRecipeFactory[] = [
   },
   {
     id: "standard-if-colon",
+    shape: "character-edit",
+    primarySkill: "punctuation-insertion",
+    shortcutFamily: "colon-insert",
+    density: 2,
+    visualShape: "short-line",
     difficulties: ["standard"],
     skillPacks: ["code-cleanup", "punctuation-casing"],
     weight: 2,
@@ -135,7 +166,55 @@ const pythonFactories: PythonRecipeFactory[] = [
     },
   },
   {
+    id: "standard-method-parentheses",
+    shape: "code-wrap",
+    primarySkill: "punctuation-insertion",
+    shortcutFamily: "method-call",
+    density: 1,
+    visualShape: "short-line",
+    difficulties: ["standard"],
+    skillPacks: ["code-cleanup", "argument-cleanup"],
+    weight: 2,
+    build: (rng) => {
+      const name = identifier(rng);
+      const method = rng.pick(["strip", "lower", "upper"]);
+      return pythonRecipe(`${name} = ${name}.${method}()`, `${name} = ${name}.${method}`, "standard", ["code-cleanup", "argument-cleanup"], {
+        path: ["jump to method end", "insert call parentheses"],
+        attention: [{ text: `${method}()`, reason: "method call parentheses", skillTags: ["punctuation-insertion"] }],
+        errors: [{ type: "missing-character", skillTags: ["punctuation-insertion"] }],
+      });
+    },
+  },
+  {
+    id: "standard-mini-rename",
+    shape: "code-rename",
+    primarySkill: "replacement",
+    shortcutFamily: "rename",
+    density: 2,
+    visualShape: "short-line",
+    difficulties: ["standard"],
+    skillPacks: ["code-refactor-micro-edits", "rename", "simple-refactor"],
+    weight: 1.6,
+    build: (rng) => {
+      const oldName = identifier(rng);
+      const newName = distinct(rng, pythonPools.identifiers, [oldName]);
+      const value = valueLiteral(rng);
+      const targetName = `${newName}_value`;
+      const editableName = `${oldName}_value`;
+      return pythonRecipe(`${targetName} = ${value}`, `${editableName} = ${value}`, "standard", ["code-refactor-micro-edits", "rename", "simple-refactor"], {
+        path: ["select identifier", "replace with new name"],
+        attention: [{ text: targetName, reason: "identifier rename target", skillTags: ["replacement", "selection"] }],
+        errors: [{ type: "wrong-word", skillTags: ["replacement", "selection"] }],
+      });
+    },
+  },
+  {
     id: "advanced-rename-not",
+    shape: "code-rename",
+    primarySkill: "replacement",
+    shortcutFamily: "rename-boolean",
+    density: 3,
+    visualShape: "two-line",
     difficulties: ["advanced"],
     skillPacks: ["code-refactor-micro-edits", "rename", "boolean-cleanup", "simple-refactor"],
     weight: 3,
@@ -157,7 +236,39 @@ const pythonFactories: PythonRecipeFactory[] = [
     },
   },
   {
+    id: "advanced-call-comma-quote",
+    shape: "code-wrap",
+    primarySkill: "punctuation-insertion",
+    shortcutFamily: "call-quote-comma",
+    density: 3,
+    visualShape: "short-line",
+    difficulties: ["advanced"],
+    skillPacks: ["code-cleanup", "argument-cleanup", "string-cleanup", "selection-practice"],
+    weight: 2,
+    build: (rng) => {
+      const fn = functionName(rng);
+      const arg = shortArg(rng);
+      const value = bareString(rng);
+      return pythonRecipe(`${fn}(${arg}, "${value}")`, `${fn}(${arg} ${value})`, "advanced", ["code-cleanup", "argument-cleanup", "string-cleanup", "selection-practice"], {
+        path: ["jump between arguments", "insert comma", "select bare string", "wrap with quotes"],
+        attention: [
+          { text: `${arg},`, reason: "argument separator", skillTags: ["punctuation-insertion"] },
+          { text: `"${value}"`, reason: "string quote target", skillTags: ["punctuation-insertion", "selection"] },
+        ],
+        errors: [
+          { type: "missing-comma", skillTags: ["punctuation-insertion"] },
+          { type: "missing-character", skillTags: ["punctuation-insertion", "selection"] },
+        ],
+      });
+    },
+  },
+  {
     id: "advanced-call-and-assignment",
+    shape: "code-wrap",
+    primarySkill: "punctuation-insertion",
+    shortcutFamily: "call-and-spacing",
+    density: 2,
+    visualShape: "two-line",
     difficulties: ["advanced"],
     skillPacks: ["code-cleanup", "argument-cleanup"],
     weight: 3,
@@ -180,6 +291,11 @@ const pythonFactories: PythonRecipeFactory[] = [
   },
   {
     id: "advanced-string-method",
+    shape: "wrap",
+    primarySkill: "selection",
+    shortcutFamily: "string-method",
+    density: 3,
+    visualShape: "short-line",
     difficulties: ["advanced"],
     skillPacks: ["code-cleanup", "string-cleanup", "argument-cleanup", "selection-practice"],
     weight: 2,
@@ -203,6 +319,11 @@ const pythonFactories: PythonRecipeFactory[] = [
   },
   {
     id: "advanced-condition-cleanup",
+    shape: "code-block",
+    primarySkill: "whitespace-correction",
+    shortcutFamily: "condition-indent",
+    density: 3,
+    visualShape: "two-line",
     difficulties: ["advanced"],
     skillPacks: ["code-cleanup", "indentation", "simple-refactor"],
     weight: 2,
@@ -225,6 +346,11 @@ const pythonFactories: PythonRecipeFactory[] = [
   },
   {
     id: "multiline-function-return",
+    shape: "code-block",
+    primarySkill: "punctuation-insertion",
+    shortcutFamily: "function-block",
+    density: 2,
+    visualShape: "multiline",
     difficulties: ["multiline"],
     skillPacks: ["indentation", "code-cleanup", "argument-cleanup"],
     weight: 3,
@@ -247,6 +373,11 @@ const pythonFactories: PythonRecipeFactory[] = [
   },
   {
     id: "multiline-if-return",
+    shape: "code-boolean",
+    primarySkill: "whitespace-correction",
+    shortcutFamily: "guard-indent",
+    density: 3,
+    visualShape: "multiline",
     difficulties: ["multiline"],
     skillPacks: ["indentation", "boolean-cleanup", "simple-refactor"],
     weight: 3,
@@ -272,6 +403,11 @@ const pythonFactories: PythonRecipeFactory[] = [
   },
   {
     id: "multiline-loop-print",
+    shape: "code-indent",
+    primarySkill: "line-navigation",
+    shortcutFamily: "loop-indent",
+    density: 2,
+    visualShape: "multiline",
     difficulties: ["multiline"],
     skillPacks: ["indentation", "code-cleanup", "argument-cleanup"],
     weight: 3,
@@ -294,6 +430,11 @@ const pythonFactories: PythonRecipeFactory[] = [
   },
   {
     id: "multiline-accumulator",
+    shape: "code-indent",
+    primarySkill: "whitespace-correction",
+    shortcutFamily: "accumulator-cleanup",
+    density: 3,
+    visualShape: "multiline",
     difficulties: ["multiline"],
     skillPacks: ["indentation", "code-cleanup", "simple-refactor"],
     weight: 2,
@@ -317,6 +458,38 @@ const pythonFactories: PythonRecipeFactory[] = [
       });
     },
   },
+  {
+    id: "multiline-else-branch",
+    shape: "code-block",
+    primarySkill: "line-navigation",
+    shortcutFamily: "branch-indent",
+    density: 3,
+    visualShape: "multiline",
+    difficulties: ["multiline"],
+    skillPacks: ["indentation", "boolean-cleanup", "code-cleanup"],
+    weight: 2,
+    build: (rng) => {
+      const flag = flagName(rng);
+      const value = bareString(rng);
+      return pythonRecipe(`if ${flag}:\n    print("${value}")\nelse:\n    print("skip")`, `if ${flag}\nprint(${value})\nelse\nprint skip`, "multiline", ["indentation", "boolean-cleanup", "code-cleanup", "string-cleanup"], {
+        path: ["insert condition colon", "indent first print", "quote value", "insert else colon", "indent fallback print"],
+        attention: [
+          { text: `${flag}:`, reason: "if colon target", skillTags: ["punctuation-insertion"] },
+          { text: `    print("${value}")`, reason: "first branch cleanup", skillTags: ["whitespace-correction", "punctuation-insertion", "selection"] },
+          { text: "else:", reason: "else colon target", skillTags: ["punctuation-insertion"] },
+          { text: "    print(\"skip\")", reason: "fallback branch cleanup", skillTags: ["whitespace-correction", "punctuation-insertion", "selection"] },
+        ],
+        errors: [
+          { type: "missing-character", skillTags: ["punctuation-insertion"] },
+          { type: "missing-space", skillTags: ["whitespace-correction", "line-navigation"] },
+          { type: "missing-character", skillTags: ["punctuation-insertion", "selection"] },
+          { type: "missing-character", skillTags: ["punctuation-insertion"] },
+          { type: "missing-space", skillTags: ["whitespace-correction", "line-navigation"] },
+          { type: "missing-character", skillTags: ["punctuation-insertion", "selection"] },
+        ],
+      });
+    },
+  },
 ];
 
 export function generatePythonChallenges(
@@ -327,33 +500,29 @@ export function generatePythonChallenges(
 ): Challenge[] {
   const hasFocusedPack = skillPack ? pythonFactories.some((factory) => factory.difficulties.includes(difficulty) && factory.skillPacks.includes(skillPack)) : false;
   const seedSkillPack = hasFocusedPack ? skillPack : undefined;
-  const usedRecipeIds = new Set<string>();
+  const factories = chooseVariedFactories(
+    filterPythonFactories(difficulty, seedSkillPack),
+    count,
+    `${seed}:python-variety:${difficulty}:${seedSkillPack ?? "all"}`,
+  );
 
   return Array.from({ length: count }, (_, index) => {
+    const factory = factories[index];
     const recipeSeed = `${seed}:python:${difficulty}:${seedSkillPack ?? "all"}:${index + 1}`;
     const recipe = generatePythonRecipeWithRetry(
       recipeSeed,
-      (rng) => buildPythonRecipe(rng, difficulty, seedSkillPack, usedRecipeIds),
+      (rng) => ({
+        ...factory.build(rng.fork(factory.id), difficulty),
+        id: factory.id,
+      }),
       () => fallbackPythonRecipe(difficulty),
     );
-    if (recipe.id) usedRecipeIds.add(recipe.id);
     return recipeToChallenge(recipe, seed, index);
   });
 }
 
 export function filterPythonTemplates(difficulty: Difficulty, skillPack?: SkillPack): PythonRecipeFactory[] {
   return filterPythonFactories(difficulty, skillPack);
-}
-
-function buildPythonRecipe(rng: GeneratorRng, difficulty: Difficulty, skillPack: SkillPack | undefined, usedRecipeIds: Set<string>): GeneratedRecipe & { id?: string } {
-  const factories = filterPythonFactories(difficulty, skillPack);
-  const available = factories.filter((factory) => !usedRecipeIds.has(factory.id));
-  const pool = available.length > 0 ? available : factories;
-  const factory = rng.weighted(pool.map((item) => ({ value: item, weight: item.weight })));
-  return {
-    ...factory.build(rng.fork(factory.id), difficulty),
-    id: factory.id,
-  };
 }
 
 function filterPythonFactories(difficulty: Difficulty, skillPack?: SkillPack): PythonRecipeFactory[] {

@@ -51,6 +51,30 @@ describe("diff helpers", () => {
     expect(extraText).not.toContain("plain");
   });
 
+  it("does not mark active replacement words as deletion hints", () => {
+    const tokens = buildDeletionHintTokens(
+      'def save(total):\n    if no saved:\n        return "skip"\n    return total',
+      'def save(total):\n    if not saved:\n        return "skip"\n    return total',
+    );
+    const extraText = tokens
+      .filter((token) => token.status === "extra")
+      .map((token) => token.value)
+      .join("");
+
+    expect(extraText).not.toContain("no");
+  });
+
+  it("still marks a true inserted word before a matching target word", () => {
+    const tokens = buildDeletionHintTokens("if no not saved:", "if not saved:");
+    const extraText = tokens
+      .filter((token) => token.status === "extra")
+      .map((token) => token.value)
+      .join("");
+
+    expect(extraText).toContain("no ");
+    expect(extraText).not.toContain("not");
+  });
+
   it("tracks only target-side changes for attention shading", () => {
     const source = "this function works but the edge  case is unclear.";
     const target = "This function works, but the edge case is unclear.";

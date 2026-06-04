@@ -27,6 +27,47 @@ export type GeneratedRecipe = {
   errors: Array<{ type: ChallengeErrorType; skillTags: SkillTag[] }>;
 };
 
+export type RecipeShape =
+  | "case-punctuation"
+  | "delete-word"
+  | "spacing"
+  | "replace"
+  | "trim"
+  | "reorder"
+  | "line-cleanup"
+  | "character-edit"
+  | "wrap"
+  | "cursor"
+  | "selection"
+  | "code-spacing"
+  | "code-wrap"
+  | "code-rename"
+  | "code-boolean"
+  | "code-indent"
+  | "code-block";
+
+export type RunProfile = {
+  index: number;
+  count: number;
+  role: "opener" | "contrast" | "recovery" | "finale";
+  targetDensity: number;
+};
+
+export type VarietyFactoryMeta = {
+  id: string;
+  shape: RecipeShape;
+  primarySkill: SkillTag;
+  shortcutFamily: string;
+  density: number;
+  visualShape: "short-line" | "long-line" | "two-line" | "multiline" | "cursor-only";
+  weight?: number;
+};
+
+export type VarietyLedger = {
+  selectedIds: Set<string>;
+  previous?: VarietyFactoryMeta;
+};
+
 export type QualityIssue =
   | "same-text"
   | "missing-metadata"
@@ -166,6 +207,68 @@ export function generateWithRetry(
     if (qualityIssues(recipe).length === 0) return recipe;
   }
   return fallback();
+}
+
+export function chooseVariedFactories<T extends VarietyFactoryMeta>(
+  factories: readonly T[],
+  count: number,
+  seed: string,
+): T[] {
+  const rng = createRng(seed);
+  const ledger: VarietyLedger = { selectedIds: new Set() };
+  const selected: T[] = [];
+
+  for (let index = 0; index < count; index += 1) {
+    const profile = runProfile(index, count);
+    const pool = candidatePool(factories, ledger);
+    const factory = rng.weighted(pool.map((item) => ({
+      value: item,
+      weight: varietyWeight(item, profile, ledger),
+    })));
+    selected.push(factory);
+    ledger.selectedIds.add(factory.id);
+    ledger.previous = factory;
+  }
+
+  return selected;
+}
+
+function runProfile(index: number, count: number): RunProfile {
+  if (index === 0) return { index, count, role: "opener", targetDensity: 1 };
+  if (index === count - 1) return { index, count, role: "finale", targetDensity: 3 };
+  if (count === 4 && index === 2) return { index, count, role: "recovery", targetDensity: 1 };
+  return { index, count, role: "contrast", targetDensity: 2 };
+}
+
+function candidatePool<T extends VarietyFactoryMeta>(factories: readonly T[], ledger: VarietyLedger): T[] {
+  const unused = factories.filter((factory) => !ledger.selectedIds.has(factory.id));
+  let pool = unused.length > 0 ? unused : [...factories];
+  const previous = ledger.previous;
+  if (!previous) return pool;
+
+  pool = preferFiltered(pool, (factory) => factory.id !== previous.id);
+  pool = preferFiltered(pool, (factory) => factory.primarySkill !== previous.primarySkill);
+  pool = preferFiltered(pool, (factory) => factory.shape !== previous.shape);
+  pool = preferFiltered(pool, (factory) => factory.shortcutFamily !== previous.shortcutFamily);
+  return pool;
+}
+
+function preferFiltered<T>(items: T[], predicate: (item: T) => boolean): T[] {
+  const filtered = items.filter(predicate);
+  return filtered.length > 0 ? filtered : items;
+}
+
+function varietyWeight(factory: VarietyFactoryMeta, profile: RunProfile, ledger: VarietyLedger): number {
+  const base = factory.weight ?? 1;
+  const densityDistance = Math.abs(factory.density - profile.targetDensity);
+  let weight = base * (densityDistance === 0 ? 1.8 : densityDistance === 1 ? 1 : 0.55);
+
+  if (profile.role === "opener" && factory.visualShape === "short-line") weight *= 1.35;
+  if (profile.role === "finale" && (factory.visualShape === "multiline" || factory.density >= 3)) weight *= 1.35;
+  if (profile.role === "recovery" && factory.density <= 1) weight *= 1.25;
+  if (ledger.previous?.visualShape === factory.visualShape) weight *= 0.72;
+
+  return Math.max(0.1, weight);
 }
 
 function hashSeed(seed: string): number {

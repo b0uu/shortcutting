@@ -88,7 +88,7 @@ describe("HistoryPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "show share card" }));
     expect(screen.getByText(/challenge before \/ after/i)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "target" }));
+    fireEvent.change(screen.getByLabelText("mode"), { target: { value: "target-match" } });
     await waitFor(() => expect(screen.getByText(/1 recent runs/i)).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: "clear history" }));

@@ -1,5 +1,6 @@
 export type Mode = "target-match" | "drill" | "coding";
 export type Difficulty = "standard" | "advanced" | "multiline";
+export type ChallengeCount = 3 | 4 | 5 | 10 | 15;
 export type Platform = "mac" | "windows-linux";
 export type PlatformPreference = "auto" | Platform;
 export type MousePolicy = "keyboard-only" | "mouse-allowed";
@@ -115,7 +116,7 @@ export type Challenge = {
 
 export type TestConfig = {
   mode: Mode;
-  challengeCount: 3 | 4;
+  challengeCount: ChallengeCount;
   platformPreference: PlatformPreference;
   platform: Platform;
   mousePolicy: MousePolicy;
@@ -219,7 +220,7 @@ export type TestResult = {
 
 export type PersonalBestKey = {
   mode: Mode;
-  challengeCount: 3 | 4;
+  challengeCount: ChallengeCount;
   platform: Platform;
   mousePolicy: MousePolicy;
   difficulty: Difficulty;

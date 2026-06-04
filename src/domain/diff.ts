@@ -46,6 +46,12 @@ export function buildDeletionHintTokens(currentText: string, targetText: string)
 
     const skipCurrent = table[currentIndex + 1]?.[targetIndex] ?? 0;
     const skipTarget = targetIndex < targetTokens.length ? table[currentIndex][targetIndex + 1] : -1;
+    if (target && skipCurrent === skipTarget && sameTokenKind(current, target)) {
+      pushTokenCharacters(tokens, current.value, "same");
+      currentIndex += 1;
+      targetIndex += 1;
+      continue;
+    }
     if (targetIndex >= targetTokens.length || skipCurrent >= skipTarget) {
       pushTokenCharacters(tokens, current.value, "extra");
       currentIndex += 1;
@@ -112,6 +118,16 @@ function tokenLcsTable(a: TextToken[], b: TextToken[]): number[][] {
 
 function tokensMatch(a: TextToken, b: TextToken): boolean {
   return a.normalized === b.normalized;
+}
+
+function sameTokenKind(a: TextToken, b: TextToken): boolean {
+  return tokenKind(a.value) === tokenKind(b.value);
+}
+
+function tokenKind(value: string): "word" | "space" | "punctuation" {
+  if (/^[A-Za-z0-9_]+$/.test(value)) return "word";
+  if (/^\s$/.test(value)) return "space";
+  return "punctuation";
 }
 
 function pushTokenCharacters(tokens: DiffToken[], value: string, status: DiffToken["status"]) {

@@ -59,7 +59,7 @@ describe("settingsStore", () => {
   it("sanitizes invalid stored settings back to MVP defaults", () => {
     window.localStorage.setItem(settingsKey, JSON.stringify({
       mode: "vim",
-      challengeCount: 5,
+      challengeCount: 20,
       platformPreference: "plan9",
       mousePolicy: "trackpad-only",
       difficulty: "expert",

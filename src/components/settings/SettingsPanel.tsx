@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useRef } from "react";
-import type { Difficulty, Mode, MousePolicy, PlatformPreference, TestConfig, Theme, ThemeColors } from "@/domain/types";
+import type { ChallengeCount, Difficulty, Mode, MousePolicy, PlatformPreference, TestConfig, Theme, ThemeColors } from "@/domain/types";
 import { ShortcutHint } from "@/components/ui/ShortcutHint";
 
 type SettingsPanelProps = {
@@ -12,8 +12,12 @@ type SettingsPanelProps = {
   onResetLocalData: () => void;
 };
 
+const defaultPartOptions: ChallengeCount[] = [3, 4];
+const drillPartOptions: ChallengeCount[] = [5, 10, 15];
+
 export function SettingsPanel({ open, config, onClose, onChange, onShortcutMap, onResetLocalData }: SettingsPanelProps) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
+  const partOptions = config.mode === "drill" ? drillPartOptions : defaultPartOptions;
 
   useEffect(() => {
     if (!open) return;
@@ -93,8 +97,8 @@ export function SettingsPanel({ open, config, onClose, onChange, onShortcutMap, 
           <Option active={config.mode === "coding"} onClick={() => onChange({ mode: "coding" as Mode })}>coding</Option>
         </SettingGroup>
         <SettingGroup label="parts">
-          {[3, 4].map((count) => (
-            <Option key={count} active={config.challengeCount === count} onClick={() => onChange({ challengeCount: count as 3 | 4 })}>
+          {partOptions.map((count) => (
+            <Option key={count} active={config.challengeCount === count} onClick={() => onChange({ challengeCount: count })}>
               {count}
             </Option>
           ))}
