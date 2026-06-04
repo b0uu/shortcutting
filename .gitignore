@@ -5,8 +5,10 @@ out
 coverage
 playwright-report
 test-results
-.env
-.env.local
+.env*
+!.env.example
+supabase.env
+supabase.env.*
 npm-debug.log*
 tsconfig.tsbuildinfo
 AGENTS.md

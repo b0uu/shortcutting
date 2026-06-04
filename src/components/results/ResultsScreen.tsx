@@ -15,9 +15,11 @@ type ResultsScreenProps = {
   themeColors: ThemeColors;
   onPlayAgain: () => void;
   onPracticeAgain?: (suggestion: PracticeSuggestion) => void;
+  accountConnected?: boolean;
+  onOpenAccount?: () => void;
 };
 
-export function ResultsScreen({ result, themeColors, onPlayAgain, onPracticeAgain }: ResultsScreenProps) {
+export function ResultsScreen({ result, themeColors, onPlayAgain, onPracticeAgain, accountConnected = false, onOpenAccount }: ResultsScreenProps) {
   const sectionRef = useRef<HTMLElement | null>(null);
   const shareRef = useRef<HTMLDivElement | null>(null);
   const tabAnimationTimeout = useRef<number | null>(null);
@@ -221,6 +223,11 @@ export function ResultsScreen({ result, themeColors, onPlayAgain, onPracticeAgai
           <motion.button layout type="button" className="btn-ghost" onClick={() => onPracticeAgain(result.nextPracticeSuggestion)}>
             <span>practice this again</span>
             <ShortcutHint keys={[modifier, "G"]} />
+          </motion.button>
+        )}
+        {!accountConnected && onOpenAccount && (
+          <motion.button layout type="button" className="btn-ghost" onClick={onOpenAccount}>
+            <span>save stats</span>
           </motion.button>
         )}
       </motion.div>

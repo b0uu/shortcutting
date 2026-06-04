@@ -485,9 +485,9 @@ Store in `localStorage`:
 
 Detailed edit events may stay in memory unless persistence remains simple and small. Persist summaries and lightweight per-part metadata for analytics and history.
 
-Keep result logging behind an interface so a backend can be added later without changing game logic.
+Keep result logging behind an interface so local and cloud implementations can coexist without changing game logic.
 
-No MVP login, global leaderboard, Supabase package, Supabase schema, or environment variables.
+Historical MVP note: login, global leaderboards, Supabase packages, schema, and environment variables were excluded from the initial playable MVP. They are now post-MVP implementation work; see `docs/auth-progress-leaderboards.md`.
 
 ## 16. Platform handling
 
@@ -583,10 +583,9 @@ Keep these core models:
 
 ## 20. Backend and later features
 
-Supabase is deferred. It may be useful later for anonymous aggregate results and analytics, but it should not block the playable MVP.
+Supabase is no longer deferred. Current backend direction is Supabase email auth, database-backed progress, public profiles, and keyboard-only leaderboards. See `docs/auth-progress-leaderboards.md`.
 
 Later candidates:
-- Anonymous result logging
 - Aggregate stats
 - Daily seeded challenge
 - Replay timeline
@@ -604,10 +603,8 @@ Later candidates:
 - Default mouse policy: Keyboard-only
 - MVP difficulty: Standard, Advanced, and Multi-line
 - MVP includes downloadable share cards
-- MVP is local-first
-- Supabase is deferred
-- No login
-- No global leaderboard
+- Guest play remains local-first
+- Supabase email auth, database-backed progress, public profiles, and keyboard-only leaderboards are current post-MVP work
 - No AI-generated challenges
 - Coding Mode is Python-only at first
 - No Vim mode yet

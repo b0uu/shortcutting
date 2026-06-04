@@ -16,9 +16,10 @@ Build objective, testable product systems that do not require subjective human-i
 
 Work one feature slice at a time. Do not move to the next slice until the current slice is implemented and tested with focused checks.
 
-## Non-goals
+## Historical Non-goals
 
-- No Supabase, login, global leaderboard, AI-generated challenges, Vim mode, browser/system shortcut training, or full IDE simulation.
+- This overnight pass originally excluded Supabase, login, global leaderboard, AI-generated challenges, Vim mode, browser/system shortcut training, and full IDE simulation.
+- Supabase-backed accounts, progress, public profiles, and leaderboards are now active post-MVP work. See `docs/auth-progress-leaderboards.md`.
 - Do not add Tailwind or a component library.
 - Do not substantially redesign the existing main game layout.
 - Do not make subjective visual-polish changes unless required by the new feature.

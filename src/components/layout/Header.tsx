@@ -6,20 +6,26 @@ type HeaderProps = {
   platform: Platform;
   onHome: () => void;
   onHistory: () => void;
+  onAccount: () => void;
   onSettings: () => void;
   historyDisabled: boolean;
+  accountDisabled: boolean;
   settingsDisabled: boolean;
   settingsButtonRef: RefObject<HTMLButtonElement | null>;
+  accountLabel: string;
 };
 
 export function Header({
   platform,
   onHome,
   onHistory,
+  onAccount,
   onSettings,
   historyDisabled,
+  accountDisabled,
   settingsDisabled,
   settingsButtonRef,
+  accountLabel,
 }: HeaderProps) {
   const modifier = platform === "mac" ? "⌥" : "alt";
 
@@ -39,10 +45,17 @@ export function Header({
           onClick={onHistory}
           disabled={historyDisabled}
           aria-disabled={historyDisabled}
-          tabIndex={-1}
         >
           <span>history</span>
           <ShortcutHint keys={[modifier, "Y"]} />
+        </button>
+        <button
+          type="button"
+          onClick={onAccount}
+          disabled={accountDisabled}
+          aria-disabled={accountDisabled}
+        >
+          <span>{accountLabel}</span>
         </button>
         <button
           ref={settingsButtonRef}

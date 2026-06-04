@@ -25,11 +25,16 @@
   },
   "homepage": "https://github.com/b0uu/shortcutting#readme",
   "dependencies": {
+    "@supabase/ssr": "^0.10.3",
+    "@supabase/supabase-js": "^2.107.0",
     "framer-motion": "^12.40.0",
     "html2canvas": "^1.4.1",
     "next": "^16.2.7",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
+  },
+  "overrides": {
+    "postcss": "^8.5.15"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",

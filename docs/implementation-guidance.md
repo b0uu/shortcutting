@@ -136,12 +136,12 @@ Timer state should be separate from visual screen state.
 - Stuck-state diff pointers should appear after the same inactivity trigger.
 - Diff should be subtle and local to the editable area: wrong characters, invisible whitespace indicators, punctuation markers, capitalization cues, and newline indicators.
 
-## Local-First Result Logging
+## Local-First And Cloud Result Logging
 
-- Store settings and personal bests locally for MVP.
+- Store settings and personal bests locally for MVP and as the guest fallback.
 - Record enough event data to support future analytics: keydown, input, selection changes, mouse actions, clipboard actions, timestamps, text before/after, selection before/after, challenge ID, and hint visibility.
-- Use localStorage for small settings and personal-best summaries; consider IndexedDB only for larger detailed event logs. Do not require network access.
-- Keep `SupabaseResultLogger` as a later implementation concern only.
+- Use localStorage for small settings and personal-best summaries; consider IndexedDB only for larger detailed event logs.
+- Supabase-backed accounts, progress, public profiles, and leaderboards are now post-MVP planned work. See `docs/auth-progress-leaderboards.md`.
 
 ## Personal Best Categorization
 
@@ -172,8 +172,7 @@ Keyboard-only and mouse-allowed results must not share a personal-best bucket.
 
 ## Explicit Non-Goals
 
-- Supabase in initial MVP.
-- Login, accounts, global leaderboard, or public profiles.
+- Supabase, login, accounts, global leaderboard, and public profiles were excluded from the initial MVP only. They are no longer permanent non-goals.
 - AI-generated challenges.
 - Code-editing mode.
 - Vim mode.
