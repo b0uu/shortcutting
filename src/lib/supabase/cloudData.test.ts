@@ -3,7 +3,7 @@ import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { generateTargetChallenges } from "@/domain/challenges";
 import { summarizeResult } from "@/domain/results";
 import type { ChallengeResult, TestConfig } from "@/domain/types";
-import { saveCloudResult } from "./cloudData";
+import { importCloudResults, saveCloudResult } from "./cloudData";
 
 const config: TestConfig = {
   mode: "target-match",
@@ -43,6 +43,20 @@ describe("cloudData", () => {
     const saved = await saveCloudResult(client.client, { id: "user-1", email: "u@example.com" } as User, result);
 
     expect(saved.validation.valid).toBe(false);
+    expect(client.insert).not.toHaveBeenCalled();
+    expect(client.upsert).not.toHaveBeenCalled();
+  });
+
+  it("counts invalid imports as rejected instead of imported", async () => {
+    const result = buildResult();
+    result.challengeResults[0] = {
+      ...result.challengeResults[0],
+      finalText: "wrong",
+    };
+    const client = fakeClient();
+    const summary = await importCloudResults(client.client, { id: "user-1", email: "u@example.com" } as User, [result]);
+
+    expect(summary).toEqual({ imported: 0, skipped: 0, rejected: 1 });
     expect(client.insert).not.toHaveBeenCalled();
     expect(client.upsert).not.toHaveBeenCalled();
   });

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PublicSiteHeader } from "@/components/layout/PublicSiteHeader";
 import { formatElapsed } from "@/domain/timer";
 import type { ChallengeCount, Difficulty, Mode } from "@/domain/types";
 import { getLeaderboardEntries } from "@/lib/supabase/cloudData";
@@ -23,54 +24,108 @@ export default async function LeaderboardsPage({ searchParams }: LeaderboardPage
   const entries = client
     ? await getLeaderboardEntries(client, { mode, difficulty, challengeCount })
     : [];
+  const leader = entries[0] ?? null;
 
   return (
     <main className="public-page">
-      <nav className="public-nav">
-        <Link href="/">shortcutting</Link>
-        <span>leaderboards</span>
-      </nav>
-      <section className="public-hero">
-        <p>keyboard-only public bests</p>
-        <h1>leaderboards</h1>
-      </section>
-      <form className="leaderboard-filters">
-        <label>
-          <span>mode</span>
-          <select name="mode" defaultValue={mode}>
-            {modes.map((item) => <option key={item} value={item}>{labelMode(item)}</option>)}
-          </select>
-        </label>
-        <label>
-          <span>difficulty</span>
-          <select name="difficulty" defaultValue={difficulty}>
-            {difficulties.map((item) => <option key={item} value={item}>{item === "multiline" ? "multi-line" : item}</option>)}
-          </select>
-        </label>
-        <label>
-          <span>parts</span>
-          <select name="parts" defaultValue={challengeCount}>
-            {partCounts.map((item) => <option key={item} value={item}>{item}</option>)}
-          </select>
-        </label>
-        <button type="submit" className="btn-ghost">filter</button>
-      </form>
-      <section className="leaderboard-table" aria-label="leaderboard results">
-        {!client ? (
-          <p className="empty-state">Supabase is not configured yet.</p>
-        ) : entries.length === 0 ? (
-          <p className="empty-state">No eligible runs yet.</p>
-        ) : entries.map((entry) => (
-          <Link key={entry.id} className="leaderboard-row" href={`/profile/${entry.handle}`}>
-            <span className="leaderboard-rank">#{entry.rank}</span>
-            <span className="leaderboard-player">
-              <strong>{entry.displayName}</strong>
-              <em>@{entry.handle}</em>
-            </span>
-            <span>{formatElapsed(entry.elapsedMs)}</span>
-            <span>{entry.editsPerMinute} edits/min</span>
-          </Link>
-        ))}
+      <PublicSiteHeader active="leaderboards" />
+      <section className="lb-main">
+        <div className="lb-header">
+          <div>
+            <h1 className="lb-title">leaderboard</h1>
+            <p className="lb-sub">best times - keyboard only</p>
+          </div>
+        </div>
+
+        <div className="filter-row" aria-label="leaderboard filters">
+          <div className="filter-group">
+            {difficulties.map((item) => (
+              <Link
+                key={item}
+                className={`filter-btn ${difficulty === item ? "active" : ""}`}
+                href={leaderboardHref({ mode, difficulty: item, challengeCount })}
+              >
+                {item === "multiline" ? "multi-line" : item}
+              </Link>
+            ))}
+          </div>
+          <div className="filter-sep" />
+          <div className="filter-group">
+            {partCounts.map((item) => (
+              <Link
+                key={item}
+                className={`filter-btn ${challengeCount === item ? "active" : ""}`}
+                href={leaderboardHref({ mode, difficulty, challengeCount: item })}
+              >
+                {item} parts
+              </Link>
+            ))}
+          </div>
+          <div className="filter-sep" />
+          <div className="filter-group">
+            {modes.map((item) => (
+              <Link
+                key={item}
+                className={`filter-btn ${mode === item ? "active" : ""}`}
+                href={leaderboardHref({ mode: item, difficulty, challengeCount })}
+              >
+                {labelMode(item)}
+              </Link>
+            ))}
+          </div>
+          <div className="filter-right">updated just now</div>
+        </div>
+
+        <div className="my-rank-bar" aria-label="leaderboard summary">
+          <div className="my-rank-left">
+            <div className="my-rank-label">current leader</div>
+            <div className="my-rank-val">{leader ? "#1" : "none"}</div>
+            <div className="my-rank-sub">{leader ? `@${leader.handle}` : "no eligible runs yet"}</div>
+          </div>
+          <div className="my-rank-right">
+            <div className="my-rank-label">best time</div>
+            <div className="my-rank-time">{leader ? formatElapsed(leader.elapsedMs) : "--:--.-"}</div>
+            <div className="my-rank-sub">{labelMode(mode)} - {challengeCount} parts</div>
+          </div>
+        </div>
+
+        <section aria-label="leaderboard results">
+          <table className="lb-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>player</th>
+                <th>best time</th>
+                <th>edits/min</th>
+                <th>date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {!client ? (
+                <tr>
+                  <td colSpan={5}>Supabase is not configured yet.</td>
+                </tr>
+              ) : entries.length === 0 ? (
+                <tr>
+                  <td colSpan={5}>No eligible runs yet.</td>
+                </tr>
+              ) : entries.map((entry) => (
+                <tr key={entry.id}>
+                  <td><span className={`rank ${rankTone(entry.rank)}`}>{entry.rank}</span></td>
+                  <td>
+                    <Link className="lb-user" href={`/profile/${entry.handle}`}>
+                      <span className="lb-avatar" aria-hidden="true">{initialsFor(entry.displayName, entry.handle)}</span>
+                      <span className="lb-name">{entry.displayName}</span>
+                    </Link>
+                  </td>
+                  <td><span className="lb-time">{formatElapsed(entry.elapsedMs)}</span></td>
+                  <td>{entry.editsPerMinute}</td>
+                  <td>{formatShortDate(entry.completedAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
       </section>
     </main>
   );
@@ -89,4 +144,31 @@ function parseNumberOption(value: string | string[] | undefined, options: number
 function labelMode(mode: Mode): string {
   if (mode === "target-match") return "target match";
   return mode;
+}
+
+function leaderboardHref(filter: { mode: Mode; difficulty: Difficulty; challengeCount: number }): string {
+  const params = new URLSearchParams({
+    mode: filter.mode,
+    difficulty: filter.difficulty,
+    parts: String(filter.challengeCount),
+  });
+  return `/leaderboards?${params.toString()}`;
+}
+
+function rankTone(rank: number): string {
+  if (rank === 1) return "gold";
+  if (rank === 2) return "silver";
+  if (rank === 3) return "bronze";
+  return "";
+}
+
+function initialsFor(displayName: string, handle: string): string {
+  const source = displayName.trim() || handle;
+  const words = source.split(/[\s_-]+/).filter(Boolean);
+  if (words.length >= 2) return `${words[0][0]}${words[1][0]}`.toLowerCase();
+  return source.slice(0, 2).toLowerCase();
+}
+
+function formatShortDate(value: string): string {
+  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(value)).toLowerCase();
 }

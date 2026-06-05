@@ -7,6 +7,7 @@ This is the current post-MVP direction for cloud features.
 - Guest play remains available and stores local history.
 - Supabase email auth is implemented first.
 - Google and GitHub OAuth are TODOs and are not implemented in this pass.
+- Account entry happens on `/onboarding`, not in a modal.
 - Public profiles are public by default.
 - Leaderboard participation is on by default, with a visible opt-out.
 - Local history imports automatically after signup.
@@ -36,6 +37,7 @@ Auth redirect URLs:
 
 ## Public Surfaces
 
+- `/onboarding`: email sign-in/signup flow, profile-default confirmation, local history import, then redirect to profile.
 - `/leaderboards`: public rankings by mode, difficulty, and part count.
 - `/profile/[handle]`: public user profile.
 

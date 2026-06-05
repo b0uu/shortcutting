@@ -23,11 +23,31 @@ export async function requireCloudUser() {
       error: NextResponse.json({ error: "Server Supabase secret key is not configured." }, { status: 503 }),
     };
   }
-  const profile = await ensureProfile(dataClient, data.user);
+  let profile;
+  try {
+    profile = await ensureProfile(dataClient, data.user);
+  } catch (error) {
+    return {
+      error: NextResponse.json(
+        { error: cloudSetupErrorMessage(error) },
+        { status: 503 },
+      ),
+    };
+  }
+
   return {
     authClient,
     dataClient,
     user: data.user,
     profile,
   };
+}
+
+function cloudSetupErrorMessage(error: unknown): string {
+  const issue = error as { code?: string; message?: string } | null;
+  const message = issue?.message ?? "";
+  if (issue?.code === "PGRST205" || message.includes("schema cache") || message.includes("does not exist")) {
+    return "Database setup is incomplete. Run the Supabase migration.";
+  }
+  return message || "Could not load profile.";
 }

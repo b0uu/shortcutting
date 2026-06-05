@@ -49,6 +49,7 @@ export type PublicProfileSummary = {
     difficulty: Difficulty;
     challengeCount: ChallengeCount;
     elapsedMs: number;
+    editsPerMinute: number;
     completedAt: string;
   }>;
 };

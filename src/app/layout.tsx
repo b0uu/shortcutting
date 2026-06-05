@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { RouteTransition } from "@/components/layout/RouteTransition";
 import "@/styles/globals.css";
 
 function configuredSiteUrl() {
@@ -63,7 +64,9 @@ export async function generateMetadata(): Promise<Metadata> {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <RouteTransition>{children}</RouteTransition>
+      </body>
     </html>
   );
 }

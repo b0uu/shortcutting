@@ -56,7 +56,6 @@ type PublicLeaderboardRow = {
 
 type PublicProfileProgressRow = {
   handle: string;
-  user_id: string;
   mode: string;
   difficulty: string;
   challenge_count: number;
@@ -64,6 +63,14 @@ type PublicProfileProgressRow = {
   best_elapsed_ms: number | null;
   best_completed_at: string | null;
   best_edits_per_minute: number | null;
+};
+
+type PublicProfileRow = {
+  handle: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  bio: string | null;
+  created_at?: string;
 };
 
 const defaultLeaderboardLimit = 50;
@@ -200,15 +207,17 @@ export async function saveCloudResult(client: SupabaseClient, user: User, submit
   };
 }
 
-export async function importCloudResults(client: SupabaseClient, user: User, results: TestResult[]): Promise<{ imported: number; skipped: number }> {
+export async function importCloudResults(client: SupabaseClient, user: User, results: TestResult[]): Promise<{ imported: number; skipped: number; rejected: number }> {
   let imported = 0;
   let skipped = 0;
+  let rejected = 0;
   for (const result of results) {
     const saved = await saveCloudResult(client, user, result);
-    if (saved.imported) skipped += 1;
+    if (!saved.validation.valid) rejected += 1;
+    else if (saved.imported) skipped += 1;
     else imported += 1;
   }
-  return { imported, skipped };
+  return { imported, skipped, rejected };
 }
 
 export async function getCloudHistory(client: SupabaseClient, userId: string, filter: { mode?: Mode | "all"; difficulty?: Difficulty | "all" } = {}): Promise<TestResult[]> {
@@ -279,15 +288,23 @@ export async function getLeaderboardEntries(
 
 export async function getPublicProfileSummary(client: SupabaseClient, handle: string): Promise<PublicProfileSummary | null> {
   const { data: profileRow, error } = await client
-    .from("profiles")
-    .select("*")
+    .from("public_profiles")
+    .select("handle,display_name,avatar_url,bio,created_at")
     .eq("handle", normalizeHandle(handle))
-    .eq("public_profile", true)
-    .maybeSingle<ProfileRow>();
+    .maybeSingle<PublicProfileRow>();
   if (error) throw error;
   if (!profileRow) return null;
 
-  const profile = rowToProfile(profileRow);
+  const profile: AccountProfile = {
+    userId: "",
+    handle: profileRow.handle,
+    displayName: profileRow.display_name ?? profileRow.handle,
+    avatarUrl: profileRow.avatar_url,
+    bio: profileRow.bio ?? "",
+    publicProfile: true,
+    leaderboardOptOut: false,
+    createdAt: profileRow.created_at,
+  };
   const { data: progressRows, error: progressError } = await client
     .from("public_profile_progress")
     .select("mode,difficulty,challenge_count,run_count,best_elapsed_ms,best_completed_at,best_edits_per_minute")
@@ -308,6 +325,7 @@ export async function getPublicProfileSummary(client: SupabaseClient, handle: st
       difficulty: row.difficulty as Difficulty,
       challengeCount: Number(row.challenge_count) as PublicProfileSummary["bests"][number]["challengeCount"],
       elapsedMs: Number(row.best_elapsed_ms),
+      editsPerMinute: Number(row.best_edits_per_minute ?? 0),
       completedAt: String(row.best_completed_at),
     }))
     .sort((first, second) => first.elapsedMs - second.elapsedMs)

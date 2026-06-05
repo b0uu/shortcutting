@@ -111,9 +111,17 @@ create index if not exists runs_user_completed_idx on public.runs(user_id, compl
 create index if not exists challenge_results_run_idx on public.challenge_results(run_id, part_index);
 create index if not exists leaderboard_bucket_idx on public.leaderboard_entries(mode, difficulty, challenge_count, elapsed_ms asc);
 
-create policy "public can read public profiles"
+drop policy if exists "public can read public profiles" on public.profiles;
+drop policy if exists "users read own profile" on public.profiles;
+drop policy if exists "users insert own profile" on public.profiles;
+drop policy if exists "users update own profile" on public.profiles;
+drop policy if exists "users read own runs" on public.runs;
+drop policy if exists "users read own challenge results" on public.challenge_results;
+drop policy if exists "users read own progress" on public.user_progress;
+
+create policy "users read own profile"
 on public.profiles for select
-using (public_profile = true or auth.uid() = user_id);
+using (auth.uid() = user_id);
 
 create policy "users insert own profile"
 on public.profiles for insert
@@ -155,7 +163,6 @@ where profiles.leaderboard_opt_out = false;
 create or replace view public.public_profile_progress as
 select
   profiles.handle,
-  profiles.user_id,
   user_progress.mode,
   user_progress.difficulty,
   user_progress.challenge_count,
@@ -167,10 +174,21 @@ from public.profiles
 join public.user_progress on user_progress.user_id = profiles.user_id
 where profiles.public_profile = true;
 
-grant select on public.profiles to anon, authenticated;
+create or replace view public.public_profiles as
+select
+  handle,
+  display_name,
+  avatar_url,
+  bio,
+  created_at
+from public.profiles
+where public_profile = true;
+
+grant select on public.profiles to authenticated;
 grant insert, update on public.profiles to authenticated;
 grant select on public.runs to authenticated;
 grant select on public.challenge_results to authenticated;
 grant select on public.user_progress to authenticated;
 grant select on public.public_leaderboard_entries to anon, authenticated;
 grant select on public.public_profile_progress to anon, authenticated;
+grant select on public.public_profiles to anon, authenticated;

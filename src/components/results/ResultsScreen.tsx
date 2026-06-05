@@ -3,6 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import html2canvas from "html2canvas";
 import Image from "next/image";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { formatElapsed } from "@/domain/timer";
 import { themeCssVariables } from "@/domain/themes";
@@ -16,10 +17,10 @@ type ResultsScreenProps = {
   onPlayAgain: () => void;
   onPracticeAgain?: (suggestion: PracticeSuggestion) => void;
   accountConnected?: boolean;
-  onOpenAccount?: () => void;
+  accountHref?: string;
 };
 
-export function ResultsScreen({ result, themeColors, onPlayAgain, onPracticeAgain, accountConnected = false, onOpenAccount }: ResultsScreenProps) {
+export function ResultsScreen({ result, themeColors, onPlayAgain, onPracticeAgain, accountConnected = false, accountHref }: ResultsScreenProps) {
   const sectionRef = useRef<HTMLElement | null>(null);
   const shareRef = useRef<HTMLDivElement | null>(null);
   const tabAnimationTimeout = useRef<number | null>(null);
@@ -225,10 +226,10 @@ export function ResultsScreen({ result, themeColors, onPlayAgain, onPracticeAgai
             <ShortcutHint keys={[modifier, "G"]} />
           </motion.button>
         )}
-        {!accountConnected && onOpenAccount && (
-          <motion.button layout type="button" className="btn-ghost" onClick={onOpenAccount}>
+        {!accountConnected && accountHref && (
+          <Link href={accountHref} className="btn-ghost results-link-action">
             <span>save stats</span>
-          </motion.button>
+          </Link>
         )}
       </motion.div>
       <p className="export-status" aria-live="polite">{exportError}</p>

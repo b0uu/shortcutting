@@ -1,4 +1,5 @@
 import type { RefObject } from "react";
+import Link from "next/link";
 import { ShortcutHint } from "@/components/ui/ShortcutHint";
 import type { Platform } from "@/domain/types";
 
@@ -6,9 +7,10 @@ type HeaderProps = {
   platform: Platform;
   onHome: () => void;
   onHistory: () => void;
-  onAccount: () => void;
+  accountHref: string;
   onSettings: () => void;
   historyDisabled: boolean;
+  leaderboardDisabled: boolean;
   accountDisabled: boolean;
   settingsDisabled: boolean;
   settingsButtonRef: RefObject<HTMLButtonElement | null>;
@@ -19,9 +21,10 @@ export function Header({
   platform,
   onHome,
   onHistory,
-  onAccount,
+  accountHref,
   onSettings,
   historyDisabled,
+  leaderboardDisabled,
   accountDisabled,
   settingsDisabled,
   settingsButtonRef,
@@ -49,14 +52,15 @@ export function Header({
           <span>history</span>
           <ShortcutHint keys={[modifier, "Y"]} />
         </button>
-        <button
-          type="button"
-          onClick={onAccount}
-          disabled={accountDisabled}
-          aria-disabled={accountDisabled}
-        >
-          <span>{accountLabel}</span>
-        </button>
+        {leaderboardDisabled ? (
+          <button type="button" disabled aria-disabled="true">
+            <span>leaderboards</span>
+          </button>
+        ) : (
+          <Link href="/leaderboards">
+            <span>leaderboards</span>
+          </Link>
+        )}
         <button
           ref={settingsButtonRef}
           type="button"
@@ -67,6 +71,15 @@ export function Header({
           <span>settings</span>
           <ShortcutHint keys={["esc"]} />
         </button>
+        {accountDisabled ? (
+          <button type="button" disabled aria-disabled="true">
+            <span>{accountLabel}</span>
+          </button>
+        ) : (
+          <Link href={accountHref}>
+            <span>{accountLabel}</span>
+          </Link>
+        )}
       </nav>
     </header>
   );

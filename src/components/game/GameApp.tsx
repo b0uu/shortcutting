@@ -34,9 +34,9 @@ import type {
 import { LocalResultLogger } from "@/storage/localResultLogger";
 import { CloudResultLogger } from "@/storage/cloudResultLogger";
 import { HybridResultLogger } from "@/storage/hybridResultLogger";
+import { importLocalHistoryOnce } from "@/storage/cloudImport";
 import { loadSettings, saveSettings } from "@/storage/settingsStore";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { AccountPanel } from "@/components/account/AccountPanel";
 import { Header } from "@/components/layout/Header";
 import { HistoryPanel } from "@/components/history/HistoryPanel";
 import { ShortcutMapPanel } from "@/components/shortcuts/ShortcutMapPanel";
@@ -74,7 +74,7 @@ const COMPLETION_FEEDBACK_MS = 260;
 const COMPLETION_FLASH_MS = 1200;
 const QUICK_CROSSFADE_MS = 35;
 const RESULTS_CROSSFADE_MS = 220;
-const CLOUD_IMPORT_BATCH_SIZE = 50;
+const ROUTE_PANEL_OPEN_DELAY_MS = 260;
 
 const defaultConfig: TestConfig = {
   mode: "target-match",
@@ -98,8 +98,6 @@ export function GameApp() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [accountUser, setAccountUser] = useState<AccountUser | null>(null);
   const [accountProfile, setAccountProfile] = useState<AccountProfile | null>(null);
-  const [accountOpen, setAccountOpen] = useState(false);
-  const [accountStatus, setAccountStatus] = useState<string | null>(null);
   const cloudLogger = useMemo(() => accountUser ? new CloudResultLogger() : null, [accountUser]);
   const logger = useMemo(() => new HybridResultLogger(localLogger, cloudLogger), [cloudLogger, localLogger]);
   const [config, setConfig] = useState<TestConfig>(defaultConfig);
@@ -167,6 +165,50 @@ export function GameApp() {
 
   useEffect(() => {
     document.title = "shortcutting";
+  }, []);
+
+  useEffect(() => {
+    let openPanelTimeout: number | null = null;
+
+    function readRequestedPanel(): "history" | "settings" | null {
+      const url = new URL(window.location.href);
+      const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
+      const storedPanel = window.sessionStorage.getItem("shortcutting:open-panel");
+      const panel = storedPanel ?? url.searchParams.get("panel") ?? hashParams.get("panel");
+      return panel === "history" || panel === "settings" ? panel : null;
+    }
+
+    function clearRequestedPanel() {
+      const url = new URL(window.location.href);
+      const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
+      window.sessionStorage.removeItem("shortcutting:open-panel");
+      url.searchParams.delete("panel");
+      if (hashParams.has("panel")) url.hash = "";
+      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+
+    function openRequestedPanel() {
+      const panel = readRequestedPanel();
+      if (!panel) return;
+      if (openPanelTimeout) window.clearTimeout(openPanelTimeout);
+      openPanelTimeout = window.setTimeout(() => {
+        if (panel === "history") {
+          setHistoryOpen(true);
+        } else {
+          setSettingsOpen(true);
+        }
+        clearRequestedPanel();
+      }, ROUTE_PANEL_OPEN_DELAY_MS);
+    }
+
+    openRequestedPanel();
+    window.addEventListener("hashchange", openRequestedPanel);
+    window.addEventListener("popstate", openRequestedPanel);
+    return () => {
+      if (openPanelTimeout) window.clearTimeout(openPanelTimeout);
+      window.removeEventListener("hashchange", openRequestedPanel);
+      window.removeEventListener("popstate", openRequestedPanel);
+    };
   }, []);
 
   useEffect(() => {
@@ -270,11 +312,6 @@ export function GameApp() {
         return;
       }
 
-      if (accountOpen && event.key === "Escape") {
-        closeAccount();
-        return;
-      }
-
       if (settingsOpen && event.key === "Escape") {
         closeSettings();
         return;
@@ -291,7 +328,7 @@ export function GameApp() {
         return;
       }
 
-      if (settingsOpen || accountOpen || midChallenge || phase !== "pre-test" || !isAltShortcut(event)) {
+      if (settingsOpen || historyOpen || shortcutMapOpen || midChallenge || phase !== "pre-test" || !isAltShortcut(event)) {
         return;
       }
 
@@ -317,7 +354,7 @@ export function GameApp() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountOpen, historyOpen, settingsOpen, shortcutMapOpen, phase, midChallenge, config.mode]);
+  }, [historyOpen, settingsOpen, shortcutMapOpen, phase, midChallenge, config.mode]);
 
   const resetPreview = useCallback((nextConfig: TestConfig) => {
     clearScheduledWork();
@@ -698,14 +735,6 @@ export function GameApp() {
     if (!midChallenge) setSettingsOpen(true);
   }
 
-  function openAccount() {
-    if (!midChallenge) setAccountOpen(true);
-  }
-
-  function closeAccount() {
-    setAccountOpen(false);
-  }
-
   function openHistory() {
     if (!midChallenge) setHistoryOpen(true);
   }
@@ -743,85 +772,18 @@ export function GameApp() {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "Could not load account.");
       setAccountProfile(payload.profile);
-    } catch (error) {
-      setAccountStatus(error instanceof Error ? error.message : "Could not load account.");
+    } catch {
+      setAccountProfile(null);
     }
   }
 
   async function autoImportLocalHistory(userId: string) {
-    const key = `shortcutting:cloud-imported:${userId}`;
-    if (window.localStorage.getItem(key)) return;
     const results = await localLogger.getResults();
-    if (results.length === 0) {
-      window.localStorage.setItem(key, "true");
-      return;
-    }
     try {
-      let imported = 0;
-      let skipped = 0;
-      for (let index = 0; index < results.length; index += CLOUD_IMPORT_BATCH_SIZE) {
-        const response = await fetch("/api/results/import", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ results: results.slice(index, index + CLOUD_IMPORT_BATCH_SIZE) }),
-        });
-        if (!response.ok) throw new Error("Import failed.");
-        const summary = await response.json();
-        imported += Number(summary.imported ?? 0);
-        skipped += Number(summary.skipped ?? 0);
-      }
-      window.localStorage.setItem(key, "true");
-      setAccountStatus(`imported ${imported} local runs${skipped > 0 ? `, skipped ${skipped}` : ""}`);
+      await importLocalHistoryOnce(userId, results);
     } catch {
-      setAccountStatus("cloud import will retry next time you sign in");
+      // Leaving the import marker unset lets the next signed-in session retry.
     }
-  }
-
-  async function sendAccountEmail(email: string) {
-    if (!supabase) {
-      setAccountStatus("Supabase is not configured yet.");
-      return;
-    }
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
-    setAccountStatus(error ? error.message : "magic link sent");
-  }
-
-  async function signOutAccount() {
-    if (!supabase) return;
-    await supabase.auth.signOut();
-    setAccountUser(null);
-    setAccountProfile(null);
-    setAccountStatus("signed out");
-  }
-
-  async function updateAccountProfile(patch: Partial<AccountProfile>) {
-    const response = await fetch("/api/me/profile", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
-    });
-    const payload = await response.json();
-    if (!response.ok) {
-      setAccountStatus(payload.error ?? "Could not update profile.");
-      return;
-    }
-    setAccountProfile(payload.profile);
-    setAccountStatus("profile saved");
-  }
-
-  async function clearCloudAccountData() {
-    const response = await fetch("/api/me/history", { method: "DELETE" });
-    if (!response.ok) {
-      const payload = await response.json();
-      setAccountStatus(payload.error ?? "Could not delete cloud data.");
-      return;
-    }
-    setAccountStatus("cloud history deleted");
   }
 
   function hideHintImmediately() {
@@ -857,17 +819,19 @@ export function GameApp() {
   const activeSegmentStyle = {
     "--active-rail-height": `${activeRailHeightFor(config.mode, currentText)}px`,
   } as CSSProperties;
+  const accountHref = accountProfile?.handle ? `/profile/${accountProfile.handle}` : "/onboarding";
   return (
     <MotionConfig reducedMotion={config.reducedMotion ? "always" : "user"}>
     <div className="app-shell" data-theme={config.theme} style={activeThemeStyle}>
-      <div className="app-content" inert={settingsOpen || historyOpen || accountOpen || shortcutMapOpen ? true : undefined} aria-hidden={settingsOpen || historyOpen || accountOpen || shortcutMapOpen}>
+      <div className="app-content" inert={settingsOpen || historyOpen || shortcutMapOpen ? true : undefined} aria-hidden={settingsOpen || historyOpen || shortcutMapOpen}>
       <Header
         platform={config.platform}
         onHome={goHome}
         onHistory={openHistory}
-        onAccount={openAccount}
+        accountHref={accountHref}
         onSettings={openSettings}
         historyDisabled={midChallenge}
+        leaderboardDisabled={midChallenge}
         accountDisabled={midChallenge}
         settingsDisabled={midChallenge}
         settingsButtonRef={settingsButtonRef}
@@ -889,7 +853,7 @@ export function GameApp() {
             onPlayAgain={playAgain}
             onPracticeAgain={practiceAgain}
             accountConnected={accountUser !== null}
-            onOpenAccount={openAccount}
+            accountHref="/onboarding"
           />
         ) : (
           <section className={`game-view difficulty-${config.difficulty} ${config.mode === "drill" ? "drill-view" : ""} ${config.mode === "coding" ? "coding-view" : ""}`}>
@@ -1014,18 +978,6 @@ export function GameApp() {
         open={historyOpen}
         logger={logger}
         onClose={closeHistory}
-      />
-      <AccountPanel
-        open={accountOpen}
-        configured={supabase !== null}
-        user={accountUser}
-        profile={accountProfile}
-        status={accountStatus}
-        onClose={closeAccount}
-        onEmailSignIn={sendAccountEmail}
-        onSignOut={signOutAccount}
-        onUpdateProfile={updateAccountProfile}
-        onClearCloudData={clearCloudAccountData}
       />
       <ShortcutMapPanel
         open={shortcutMapOpen}
