@@ -153,7 +153,7 @@ export default function OnboardingPage() {
 
     setPending(true);
     setMessage("Sending magic link...");
-    const callbackUrl = new URL("/auth/callback", window.location.origin);
+    const callbackUrl = new URL("/auth/callback", authRedirectOrigin());
     callbackUrl.searchParams.set("next", "/onboarding?setup=1");
     const { error } = await supabase.auth.signInWithOtp({
       email: trimmedEmail,
@@ -335,6 +335,17 @@ export default function OnboardingPage() {
       </section>
     </main>
   );
+}
+
+function authRedirectOrigin(): string {
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+  if (!siteUrl) return window.location.origin;
+
+  try {
+    return new URL(siteUrl).origin;
+  } catch {
+    return window.location.origin;
+  }
 }
 
 async function readJsonResponse<T>(response: Response, fallback: string): Promise<T> {

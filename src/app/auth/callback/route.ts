@@ -8,6 +8,12 @@ export async function GET(request: NextRequest) {
   const tokenHash = requestUrl.searchParams.get("token_hash");
   const type = requestUrl.searchParams.get("type");
   const next = safeRedirectPath(requestUrl.searchParams.get("next"));
+  const canonicalOrigin = canonicalSiteOrigin();
+
+  if (canonicalOrigin && requestUrl.origin !== canonicalOrigin) {
+    return NextResponse.redirect(new URL(`${requestUrl.pathname}${requestUrl.search}`, canonicalOrigin));
+  }
+
   const supabase = await createSupabaseServerClient();
 
   if (!supabase) {
@@ -42,4 +48,15 @@ function withAuthError(path: string, message: string): string {
   const params = new URLSearchParams(search);
   params.set("auth_error", message);
   return `${pathname}?${params.toString()}`;
+}
+
+function canonicalSiteOrigin(): string | null {
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+  if (!siteUrl) return null;
+
+  try {
+    return new URL(siteUrl).origin;
+  } catch {
+    return null;
+  }
 }
