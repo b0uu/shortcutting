@@ -12,6 +12,39 @@ type PublicSiteHeaderProps = {
   profileLabel?: string;
 };
 
+export function PublicSiteHeaderFallback({
+  active,
+}: Pick<PublicSiteHeaderProps, "active">) {
+  return (
+    <header className="app-header public-app-header public-app-header-fallback">
+      <Link href="/" className="logo" aria-label="Back to shortcutting home">
+        <span className="logo-mark" aria-hidden="true">&#8997;</span>
+        <span>shortcutting</span>
+      </Link>
+      <nav aria-label="Primary">
+        <Link href="/">
+          <span>home</span>
+          <ShortcutHint keys={["alt", "H"]} />
+        </Link>
+        <PanelRouteLink panel="history">
+          <span>history</span>
+          <ShortcutHint keys={["alt", "Y"]} />
+        </PanelRouteLink>
+        <Link href="/leaderboards" aria-current={active === "leaderboards" ? "page" : undefined}>
+          <span>leaderboards</span>
+        </Link>
+        <PanelRouteLink panel="settings">
+          <span>settings</span>
+          <ShortcutHint keys={["esc"]} />
+        </PanelRouteLink>
+        <Link href="/onboarding" aria-current={active === "profile" ? "page" : undefined}>
+          <span>profile</span>
+        </Link>
+      </nav>
+    </header>
+  );
+}
+
 export async function PublicSiteHeader({
   active,
   profileHref,

@@ -1,5 +1,7 @@
 export function normalizeEditableText(value: string): string {
-  return value.replace(/\u00a0/g, " ");
+  return value
+    .replace(/\u00a0/g, " ")
+    .replace(/\r\n?/g, "\n");
 }
 
 export function getEditablePlainText(element: HTMLElement): string {

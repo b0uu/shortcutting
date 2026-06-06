@@ -52,7 +52,7 @@ describe("GameApp", () => {
     completeActiveText(firstTarget);
     await flushRunUpdate();
 
-    expect(screen.getByTestId("locked-segment")).toHaveTextContent(firstTarget);
+    expect(screen.getByTestId("locked-segment").textContent).toBe(firstTarget);
     expect(screen.queryByText(/target updated/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: /target match/i })).not.toBeInTheDocument();
     expect(screen.getByText(/part 2 of 3/i)).toBeInTheDocument();
@@ -79,7 +79,7 @@ describe("GameApp", () => {
 
     completeActiveText(firstTarget);
     await flushRunUpdate();
-    expect(screen.getByTestId("locked-segment")).toHaveTextContent(firstTarget);
+    expect(screen.getByTestId("locked-segment").textContent).toBe(firstTarget);
     expect(screen.getByLabelText(/2 of 3 parts/i)).toBeInTheDocument();
   });
 
@@ -156,7 +156,7 @@ describe("GameApp", () => {
     expect(screen.getByTestId("active-segment")).toHaveClass("hinting");
     expect(screen.queryByTestId("hint")).not.toBeInTheDocument();
     expect(document.querySelector(".diff-overlay")).not.toBeInTheDocument();
-    expect(screen.getByTestId("locked-segment")).toHaveTextContent(firstTarget);
+    expect(screen.getByTestId("locked-segment").textContent).toBe(firstTarget);
 
     completeActiveText(activeTargetText());
     await flushRunUpdate();
@@ -253,8 +253,11 @@ describe("GameApp", () => {
     render(<GameApp />);
 
     const highlighted = document.querySelectorAll(".target-attention");
-    expect(Array.from(highlighted).every((node) => (node.textContent ?? "").length === 1)).toBe(true);
-    expect(Array.from(highlighted).every((node) => activeTargetText().includes(node.textContent ?? ""))).toBe(true);
+    expect(Array.from(highlighted).every((node) => (node.textContent ?? "").length <= 1)).toBe(true);
+    expect(Array.from(highlighted).every((node) => {
+      const text = node.textContent ?? "";
+      return text === "" || activeTargetText().includes(text);
+    })).toBe(true);
   });
 
   it("marks extra active edit text and clears the hint when corrected", async () => {
@@ -269,7 +272,7 @@ describe("GameApp", () => {
     const extraText = Array.from(document.querySelectorAll(".delete-extra"))
       .map((node) => node.textContent ?? "")
       .join("");
-    expect(extraText).toContain(" extra");
+    expect(extraText).toContain("extra");
 
     completeActiveText(target);
     await flushRunUpdate();
@@ -404,7 +407,7 @@ describe("GameApp", () => {
 
     for (let index = 0; index < 3; index += 1) {
       await completeCurrentDrill();
-      await flushRunUpdate();
+      await flushRunUpdate(index === 2 ? 1300 : 320);
     }
     expect(screen.getByText(/total time/i)).toBeInTheDocument();
   });
@@ -539,7 +542,7 @@ function activeTargetText() {
 async function completeRun(count = 3) {
   for (let index = 0; index < count; index += 1) {
     completeActiveText(activeTargetText());
-    await flushRunUpdate();
+    await flushRunUpdate(index === count - 1 ? 1300 : 320);
   }
 }
 
@@ -551,11 +554,11 @@ async function completeCurrentDrill() {
     completeActiveText([...words.slice(0, 2), ...words.slice(3)].join(" "));
   } else if (prompt.includes("delete the next word")) {
     completeActiveText([words[0], ...words.slice(2)].join(" "));
-  } else if (prompt.includes("move to the previous word") || prompt.includes("move the caret to the start")) {
+  } else if (prompt.includes("move to the previous word") || prompt.includes("move the caret to the start") || prompt.includes("move to the start")) {
     beginRun();
     setSelectionRange(editor, words[0].length + 1);
     await dispatchSelectionChange();
-  } else if (prompt.includes("move to the next word") || prompt.includes("move the caret to the end")) {
+  } else if (prompt.includes("move to the next word") || prompt.includes("move the caret to the end") || prompt.includes("move to the end")) {
     beginRun();
     setSelectionRange(editor, words[0].length);
     await dispatchSelectionChange();
@@ -624,13 +627,13 @@ async function dispatchSelectionChange() {
   });
 }
 
-async function flushRunUpdate() {
+async function flushRunUpdate(durationMs = 320) {
   await act(async () => {
     await Promise.resolve();
     await Promise.resolve();
   });
   await act(async () => {
-    vi.advanceTimersByTime(300);
+    vi.advanceTimersByTime(durationMs);
   });
   await act(async () => {
     await Promise.resolve();

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
-import { PublicSiteHeader } from "@/components/layout/PublicSiteHeader";
+import { Suspense } from "react";
+import { PublicSiteHeader, PublicSiteHeaderFallback } from "@/components/layout/PublicSiteHeader";
 import { formatElapsed } from "@/domain/timer";
 import { getPublicProfileSummary } from "@/lib/supabase/cloudData";
 import { createSupabasePublicClient } from "@/lib/supabase/server";
@@ -10,17 +11,27 @@ type ProfilePageProps = {
 
 export default async function ProfilePage({ params }: ProfilePageProps) {
   const { handle } = await params;
+  return (
+    <main className="public-page">
+      <Suspense fallback={<PublicSiteHeaderFallback active="profile" />}>
+        <PublicSiteHeader active="profile" />
+      </Suspense>
+      <Suspense fallback={<ProfileSkeleton handle={handle} />}>
+        <ProfileContent handle={handle} />
+      </Suspense>
+    </main>
+  );
+}
+
+async function ProfileContent({ handle }: { handle: string }) {
   const client = createSupabasePublicClient();
   if (!client) {
     return (
-      <main className="public-page">
-        <PublicSiteHeader active="profile" />
-        <section className="public-hero">
+        <section className="public-hero public-content-ready">
           <p>public profile</p>
           <h1>@{handle}</h1>
           <span>Supabase is not configured yet.</span>
         </section>
-      </main>
     );
   }
 
@@ -28,9 +39,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
   if (!summary) notFound();
 
   return (
-    <main className="public-page">
-      <PublicSiteHeader active="profile" />
-      <section className="profile-main">
+      <section className="profile-main public-content-ready">
         <div className="profile-identity">
           <div className="avatar" aria-hidden="true">
             {initialsFor(summary.profile.displayName, summary.profile.handle)}
@@ -38,10 +47,10 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
           <div className="identity-text">
             <div className="identity-name">
               {summary.profile.displayName}
-              {summary.totals.bestElapsedMs !== null && <span className="identity-badge">personal best</span>}
+              {summary.totals.bestElapsedMs !== null && <span className="identity-badge">user</span>}
             </div>
             <div className="identity-meta">
-              member since {formatMemberSince(summary.profile.createdAt)} - {summary.totals.runs} runs completed
+              member since {formatMemberSince(summary.profile.createdAt)}
             </div>
             {summary.profile.bio && <div className="identity-meta">{summary.profile.bio}</div>}
           </div>
@@ -56,17 +65,17 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
           <div className="pb-item">
             <div className="pb-label">best edits/min</div>
             <div className="pb-val">{summary.totals.editsPerMinute}</div>
-            <div className="pb-sub">keyboard only</div>
+            <div className="pb-sub">edits/min</div>
           </div>
           <div className="pb-item">
             <div className="pb-label">runs</div>
             <div className="pb-val">{summary.totals.runs}</div>
-            <div className="pb-sub">synced public total</div>
+            <div className="pb-sub">total</div>
           </div>
           <div className="pb-item">
             <div className="pb-label">public bests</div>
             <div className="pb-val">{summary.bests.length}</div>
-            <div className="pb-sub">visible buckets</div>
+            <div className="pb-sub">modes</div>
           </div>
         </div>
 
@@ -109,7 +118,65 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
           )}
         </div>
       </section>
-    </main>
+  );
+}
+
+function ProfileSkeleton({ handle }: { handle: string }) {
+  return (
+    <section className="profile-main public-skeleton" aria-label="Loading profile">
+      <div className="profile-identity">
+        <div className="avatar skeleton-avatar" aria-hidden="true">
+          {handle.slice(0, 2).toLowerCase()}
+        </div>
+        <div className="identity-text">
+          <div className="identity-name">
+            <span className="skeleton-line name" />
+          </div>
+          <div className="identity-meta">
+            <span className="skeleton-line wide" />
+          </div>
+        </div>
+      </div>
+
+      <div className="pb-strip skeleton-block" aria-hidden="true">
+        {[0, 1, 2, 3].map((item) => (
+          <div className="pb-item" key={item}>
+            <div className="skeleton-line small" />
+            <div className="skeleton-line metric" />
+            <div className="skeleton-line medium" />
+          </div>
+        ))}
+      </div>
+
+      <div>
+        <div className="section-head">
+          <div className="section-title">public bests</div>
+          <div className="section-link">@{handle}</div>
+        </div>
+        <table className="runs-table skeleton-table" aria-hidden="true">
+          <thead>
+            <tr>
+              <th>mode</th>
+              <th>time</th>
+              <th>parts</th>
+              <th>edits/min</th>
+              <th>date</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[0, 1, 2].map((row) => (
+              <tr key={row}>
+                <td><span className="skeleton-line wide" /></td>
+                <td><span className="skeleton-line medium" /></td>
+                <td><span className="skeleton-line tiny" /></td>
+                <td><span className="skeleton-line small" /></td>
+                <td><span className="skeleton-line small" /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 

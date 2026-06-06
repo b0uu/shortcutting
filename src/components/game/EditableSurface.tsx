@@ -170,8 +170,11 @@ export function EditableSurface({
       {showDeletionHints && (
         <div className="deletion-hint-overlay" aria-hidden="true" data-testid="deletion-hint-overlay">
           {deletionHintTokens.map((token) => (
-            <span key={token.id} className={token.status === "extra" ? "delete-extra" : ""}>
-              {token.value}
+            <span
+              key={token.id}
+              className={token.status === "extra" ? `delete-extra ${extraTokenClass(token.value)}` : ""}
+            >
+              {token.status === "extra" ? token.visible : token.value}
             </span>
           ))}
         </div>
@@ -302,6 +305,12 @@ function classifyPythonToken(value: string): SyntaxToken["type"] {
 
 function token(index: number, type: SyntaxToken["type"], text: string): SyntaxToken {
   return { id: `${index}-${type}-${text}`, type, text };
+}
+
+function extraTokenClass(value: string): string {
+  if (value === "\n") return "delete-extra-newline";
+  if (value === " ") return "delete-extra-space";
+  return "";
 }
 
 function handleSmartKeyDown(

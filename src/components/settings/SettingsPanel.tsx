@@ -14,10 +14,13 @@ type SettingsPanelProps = {
 
 const defaultPartOptions: ChallengeCount[] = [3, 4];
 const drillPartOptions: ChallengeCount[] = [5, 10, 15];
+const defaultDifficultyOptions: Difficulty[] = ["standard", "advanced", "multiline"];
+const targetDifficultyOptions: Difficulty[] = ["standard", "multiline"];
 
 export function SettingsPanel({ open, config, onClose, onChange, onShortcutMap, onResetLocalData }: SettingsPanelProps) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const partOptions = config.mode === "drill" ? drillPartOptions : defaultPartOptions;
+  const difficultyOptions = config.mode === "target-match" ? targetDifficultyOptions : defaultDifficultyOptions;
 
   useEffect(() => {
     if (!open) return;
@@ -103,11 +106,15 @@ export function SettingsPanel({ open, config, onClose, onChange, onShortcutMap, 
             </Option>
           ))}
         </SettingGroup>
-        <SettingGroup label="difficulty">
-          <Option active={config.difficulty === "standard"} onClick={() => onChange({ difficulty: "standard" as Difficulty })}>standard</Option>
-          <Option active={config.difficulty === "advanced"} onClick={() => onChange({ difficulty: "advanced" as Difficulty })}>advanced</Option>
-          <Option active={config.difficulty === "multiline"} onClick={() => onChange({ difficulty: "multiline" as Difficulty })}>multi-line</Option>
-        </SettingGroup>
+        {config.mode !== "drill" && (
+          <SettingGroup label="difficulty">
+            {difficultyOptions.map((difficulty) => (
+              <Option key={difficulty} active={config.difficulty === difficulty} onClick={() => onChange({ difficulty })}>
+                {difficulty === "multiline" ? "multi-line" : difficulty}
+              </Option>
+            ))}
+          </SettingGroup>
+        )}
         <SettingGroup label="input mode">
           <Option active={config.mousePolicy === "keyboard-only"} onClick={() => onChange({ mousePolicy: "keyboard-only" as MousePolicy })}>keyboard only</Option>
           <Option active={config.mousePolicy === "mouse-allowed"} onClick={() => onChange({ mousePolicy: "mouse-allowed" as MousePolicy })}>mouse allowed</Option>

@@ -70,7 +70,8 @@ const defaultStats: ChallengeStats = {
   redoCount: 0,
 };
 
-const COMPLETION_FEEDBACK_MS = 260;
+const COMPLETION_FEEDBACK_MS = 300;
+const FINAL_COMPLETION_FEEDBACK_MS = 780;
 const COMPLETION_FLASH_MS = 1200;
 const QUICK_CROSSFADE_MS = 35;
 const RESULTS_CROSSFADE_MS = 220;
@@ -82,7 +83,7 @@ const defaultConfig: TestConfig = {
   platformPreference: "auto",
   platform: "windows-linux",
   mousePolicy: "keyboard-only",
-  difficulty: "standard",
+  difficulty: "multiline",
   soundEnabled: true,
   theme: "dark",
   customTheme: darkThemeColors,
@@ -391,6 +392,11 @@ export function GameApp() {
   function updateConfig(patch: Partial<TestConfig>) {
     const detected = detectPlatform(navigator.userAgent, navigator.platform);
     const nextPreference = patch.platformPreference ?? config.platformPreference;
+    const nextMode = patch.mode ?? config.mode;
+    const nextDifficulty = patch.difficulty
+      ?? (patch.mode === "target-match" ? "multiline"
+        : patch.mode === "drill" ? "standard"
+          : config.difficulty);
     const shouldClearPracticeFocus = patch.practiceSkillPack === undefined
       && (
         patch.mode !== undefined
@@ -404,6 +410,8 @@ export function GameApp() {
     const nextConfig = normalizeChallengeCountForMode({
       ...config,
       ...patch,
+      mode: nextMode,
+      difficulty: nextDifficulty,
       platform: resolvePlatform(nextPreference, detected),
       practiceSkillPack: shouldClearPracticeFocus ? null : (patch.practiceSkillPack ?? config.practiceSkillPack ?? null),
       seedPack: patch.seedPack ?? (shouldFreshenSeed ? freshSeedPack() : config.seedPack),
@@ -640,8 +648,8 @@ export function GameApp() {
       setSegments(transition.segments);
 
       if (transition.complete) {
-        finalizeRun(completedAt);
         completionAdvanceTimeout.current = null;
+        beginResultsReveal(completedAt);
         return;
       }
 
@@ -669,7 +677,21 @@ export function GameApp() {
       completing.current = false;
       scheduleHint();
       completionAdvanceTimeout.current = null;
-    }, COMPLETION_FEEDBACK_MS);
+    }, transition.complete ? FINAL_COMPLETION_FEEDBACK_MS : COMPLETION_FEEDBACK_MS);
+  }
+
+  function beginResultsReveal(completedAt: number) {
+    setScreenFading(true);
+    if (screenFadeTimeout.current) window.clearTimeout(screenFadeTimeout.current);
+    screenFadeTimeout.current = window.setTimeout(() => {
+      void finalizeRun(completedAt).then(() => {
+        if (screenFadeTimeout.current) window.clearTimeout(screenFadeTimeout.current);
+        screenFadeTimeout.current = window.setTimeout(() => {
+          setScreenFading(false);
+          screenFadeTimeout.current = null;
+        }, RESULTS_CROSSFADE_MS);
+      });
+    }, RESULTS_CROSSFADE_MS);
   }
 
   async function finalizeRun(completedAt: number) {
@@ -998,11 +1020,23 @@ function renderAttentionText(text: string, ranges: Challenge["attentionRanges"],
   for (let index = 0; index < text.length; index += 1) {
     const reason = highlighted.get(index);
     if (reason) {
-      nodes.push(
-        <span className="target-attention" title={reason} key={`${index}-${text[index]}`}>
-          {text[index]}
-        </span>,
-      );
+      const character = text[index];
+      if (character === "\n") {
+        nodes.push(<span className="target-attention target-newline-attention" title={reason} key={`${index}-newline`} />);
+        nodes.push("\n");
+      } else if (character === " ") {
+        nodes.push(
+          <span className="target-attention target-space-attention" title={reason} key={`${index}-space`}>
+            {" "}
+          </span>,
+        );
+      } else {
+        nodes.push(
+          <span className="target-attention" title={reason} key={`${index}-${character}`}>
+            {character}
+          </span>,
+        );
+      }
     } else {
       nodes.push(text[index]);
     }
@@ -1066,7 +1100,6 @@ function buildTargetHighlightMap(text: string, ranges: Challenge["attentionRange
 
   if (sourceText !== undefined) {
     changedTargetIndexes?.forEach((index) => {
-      if (/\s/.test(text[index])) return;
       const rangeReason = orderedRanges.find((range) => index >= range.start && index < range.end)?.reason;
       highlighted.set(index, rangeReason ?? "missing from active edit");
     });
@@ -1141,7 +1174,18 @@ function shouldCrossfadePreview(patch: Partial<TestConfig>): boolean {
 
 function normalizeChallengeCountForMode(config: TestConfig): TestConfig {
   if (config.mode === "drill") {
-    return drillPartCounts.includes(config.challengeCount) ? config : { ...config, challengeCount: 5 };
+    return {
+      ...config,
+      challengeCount: drillPartCounts.includes(config.challengeCount) ? config.challengeCount : 5,
+      difficulty: "standard",
+    };
+  }
+  if (config.mode === "target-match" && config.difficulty === "advanced") {
+    return {
+      ...config,
+      challengeCount: defaultPartCounts.includes(config.challengeCount) ? config.challengeCount : 3,
+      difficulty: "multiline",
+    };
   }
   return defaultPartCounts.includes(config.challengeCount) ? config : { ...config, challengeCount: 3 };
 }

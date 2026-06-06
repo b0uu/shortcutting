@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { PublicSiteHeader } from "@/components/layout/PublicSiteHeader";
+import { Suspense } from "react";
+import { PublicSiteHeader, PublicSiteHeaderFallback } from "@/components/layout/PublicSiteHeader";
 import { formatElapsed } from "@/domain/timer";
 import type { ChallengeCount, Difficulty, Mode } from "@/domain/types";
 import { getLeaderboardEntries } from "@/lib/supabase/cloudData";
@@ -15,6 +16,19 @@ type LeaderboardPageProps = {
 };
 
 export default async function LeaderboardsPage({ searchParams }: LeaderboardPageProps) {
+  return (
+    <main className="public-page">
+      <Suspense fallback={<PublicSiteHeaderFallback active="leaderboards" />}>
+        <PublicSiteHeader active="leaderboards" />
+      </Suspense>
+      <Suspense fallback={<LeaderboardSkeleton />}>
+        <LeaderboardContent searchParams={searchParams} />
+      </Suspense>
+    </main>
+  );
+}
+
+async function LeaderboardContent({ searchParams }: LeaderboardPageProps) {
   const params = await searchParams;
   const mode = parseOption(params?.mode, modes, "target-match");
   const difficulty = parseOption(params?.difficulty, difficulties, "standard");
@@ -27,9 +41,7 @@ export default async function LeaderboardsPage({ searchParams }: LeaderboardPage
   const leader = entries[0] ?? null;
 
   return (
-    <main className="public-page">
-      <PublicSiteHeader active="leaderboards" />
-      <section className="lb-main">
+      <section className="lb-main public-content-ready">
         <div className="lb-header">
           <div>
             <h1 className="lb-title">leaderboard</h1>
@@ -127,7 +139,72 @@ export default async function LeaderboardsPage({ searchParams }: LeaderboardPage
           </table>
         </section>
       </section>
-    </main>
+  );
+}
+
+function LeaderboardSkeleton() {
+  return (
+    <section className="lb-main public-skeleton" aria-label="Loading leaderboard">
+      <div className="lb-header">
+        <div>
+          <h1 className="lb-title">leaderboard</h1>
+          <p className="lb-sub">best times - keyboard only</p>
+        </div>
+      </div>
+      <div className="filter-row" aria-hidden="true">
+        <div className="filter-group">
+          <span className="filter-btn active">standard</span>
+          <span className="filter-btn">advanced</span>
+          <span className="filter-btn">multi-line</span>
+        </div>
+        <div className="filter-sep" />
+        <div className="filter-group">
+          <span className="filter-btn active">3 parts</span>
+          <span className="filter-btn">4 parts</span>
+        </div>
+        <div className="filter-sep" />
+        <div className="filter-group">
+          <span className="filter-btn active">target match</span>
+          <span className="filter-btn">drill</span>
+          <span className="filter-btn">coding</span>
+        </div>
+        <div className="filter-right">loading</div>
+      </div>
+      <div className="my-rank-bar skeleton-block" aria-hidden="true">
+        <div className="my-rank-left">
+          <div className="skeleton-line small" />
+          <div className="skeleton-line metric" />
+          <div className="skeleton-line medium" />
+        </div>
+        <div className="my-rank-right">
+          <div className="skeleton-line small" />
+          <div className="skeleton-line metric" />
+          <div className="skeleton-line medium" />
+        </div>
+      </div>
+      <table className="lb-table skeleton-table" aria-hidden="true">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>player</th>
+            <th>best time</th>
+            <th>edits/min</th>
+            <th>date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[0, 1, 2, 3].map((row) => (
+            <tr key={row}>
+              <td><span className="skeleton-line tiny" /></td>
+              <td><span className="skeleton-line wide" /></td>
+              <td><span className="skeleton-line medium" /></td>
+              <td><span className="skeleton-line small" /></td>
+              <td><span className="skeleton-line small" /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
   );
 }
 

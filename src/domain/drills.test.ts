@@ -80,8 +80,8 @@ describe("drills", () => {
 
     expect(promptById.get("delete-previous-word")).toMatch(/^Delete the previous word: ".+"\.$/);
     expect(promptById.get("delete-next-word")).toMatch(/^Delete the next word: ".+"\.$/);
-    expect(promptById.get("move-previous-word")).toMatch(/^Move the caret to the start of ".+"\.$/);
-    expect(promptById.get("move-next-word")).toMatch(/^Move the caret to the end of ".+"\.$/);
+    expect(promptById.get("move-previous-word")).toMatch(/^Move to the start of \w+\.$/);
+    expect(promptById.get("move-next-word")).toMatch(/^Move to the end of \w+\.$/);
     expect(promptById.get("move-character")).toMatch(/^Move the caret one character left, before the final letter in ".+"\.$/);
     expect(promptById.get("select-previous-word")).toMatch(/^Select the final word: ".+"\.$/);
     expect(promptById.get("select-current-word")).toMatch(/^Select ".+"\.$/);

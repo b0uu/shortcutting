@@ -119,7 +119,7 @@ const drillFactories: DrillFactory[] = [
       const words = uniqueWords(rng, 3);
       const text = words.join(" ");
       const expectedIndex = words[0].length + 1;
-      return drillRecipe("move-previous-word", `Move the caret to the start of "${words[1]}".`, text, text, {
+      return drillRecipe("move-previous-word", `Move to the start of ${words[1]}.`, text, text, {
         validation: { type: "cursor", expectedIndex },
         initialSelection: { start: text.length, end: text.length },
         skillPacks: ["word-movement"],
@@ -151,7 +151,7 @@ const drillFactories: DrillFactory[] = [
       const words = uniqueWords(rng, 3);
       const text = words.join(" ");
       const expectedIndex = words[0].length;
-      return drillRecipe("move-next-word", `Move the caret to the end of "${words[0]}".`, text, text, {
+      return drillRecipe("move-next-word", `Move to the end of ${words[0]}.`, text, text, {
         validation: { type: "cursor", expectedIndex },
         initialSelection: { start: 0, end: 0 },
         skillPacks: ["word-movement"],
