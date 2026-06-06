@@ -190,6 +190,11 @@ nav a {
   transition: color 0.15s, background 0.15s;
 }
 
+nav .account-nav-item {
+  justify-content: center;
+  min-width: 76px;
+}
+
 nav button:hover:not(:disabled),
 nav a:hover {
   color: var(--text);
@@ -862,6 +867,22 @@ main.screen-crossfade {
 
 .active-segment.revealed .edit-block {
   animation: lineReveal 0.52s var(--ease) both;
+}
+
+.active-hint-text {
+  width: min(560px, 100%);
+  margin: 10px 0 0 20px;
+  color: color-mix(in srgb, var(--sub) 78%, transparent);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  opacity: 0;
+  transform: translateY(-2px);
+  animation: hintTextIn 0.28s var(--ease) both;
+}
+
+.typing-now .active-hint-text {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 
 .drill-view .locked-segment.just-completed {
@@ -2835,6 +2856,10 @@ footer {
 }
 
 .auth-nav {
+  min-height: 64px;
+  margin-bottom: 56px;
+  padding: 0 0 20px;
+  border-bottom: 1px solid var(--border);
   justify-content: space-between;
 }
 
@@ -2885,6 +2910,46 @@ footer {
   width: 100%;
   justify-content: center;
   text-decoration: none;
+}
+
+.account-signin {
+  display: grid;
+  gap: 16px;
+}
+
+.auth-mode-toggle {
+  display: inline-flex;
+  width: fit-content;
+  gap: 3px;
+  border-radius: var(--r);
+  background: color-mix(in srgb, var(--sub-alt) 45%, transparent);
+  padding: 3px;
+}
+
+.auth-secondary-action {
+  justify-content: center;
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+}
+
+.auth-signin-secondary {
+  display: grid;
+  gap: 8px;
+}
+
+.auth-subtle-action {
+  justify-content: center;
+  width: 100%;
+  min-height: 32px;
+  border: 0;
+  color: var(--dim);
+}
+
+.auth-subtle-action:hover:not(:disabled),
+.auth-subtle-action:focus-visible {
+  color: var(--sub);
 }
 
 .onboarding-profile-form {
@@ -2943,6 +3008,80 @@ footer {
   font-size: 0.78rem;
 }
 
+.settings-route-page {
+  display: block;
+}
+
+.settings-page-main {
+  display: grid;
+  gap: 30px;
+  padding: 40px 0 56px;
+}
+
+.settings-page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 30px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-page-head h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.5rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+.settings-page-head p,
+.settings-page-note {
+  margin: 5px 0 0;
+  color: var(--sub);
+  font-size: 0.9rem;
+}
+
+.settings-page-grid {
+  display: grid;
+  gap: 0;
+}
+
+.settings-page-grid .setting-group {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.42fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+  margin: 0;
+  padding: 18px 0;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--sub) 13%, transparent);
+}
+
+.settings-page-grid .setting-group > legend {
+  width: auto;
+  padding: 0;
+  color: var(--dim);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.settings-page-grid .setting-group > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.settings-page-grid .opt-btn {
+  min-height: 32px;
+}
+
+.settings-page-note {
+  color: var(--dim);
+  font-size: 0.8rem;
+}
+
 .public-page {
   width: 100%;
   max-width: 900px;
@@ -2951,6 +3090,11 @@ footer {
   padding: 0 32px 80px;
   background: var(--bg);
   color: var(--text);
+}
+
+.public-page.onboarding-page {
+  padding-top: 42px;
+  padding-bottom: 0;
 }
 
 .public-app-header {
@@ -3339,6 +3483,33 @@ footer {
   gap: 20px;
 }
 
+.profile-signout {
+  margin-left: auto;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--sub);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 8px 10px;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    opacity 180ms ease;
+}
+
+.profile-signout:hover:not(:disabled),
+.profile-signout:focus-visible {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+
+.profile-signout:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
 .avatar {
   width: 52px;
   height: 52px;
@@ -3686,6 +3857,9 @@ footer {
 
   .auth-nav {
     align-items: flex-start;
+    min-height: 58px;
+    margin-bottom: 42px;
+    padding-bottom: 18px;
   }
 
   .auth-nav > div {
@@ -3760,6 +3934,11 @@ footer {
     flex-direction: column;
   }
 
+  .profile-signout {
+    margin-left: 0;
+    padding-left: 0;
+  }
+
   .pb-item {
     width: 100%;
     margin-right: 0;
@@ -3825,6 +4004,17 @@ footer {
   }
 }
 
+@keyframes hintTextIn {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @keyframes publicSkeletonSweep {
   0% {
     transform: translateX(-110%);
@@ -3839,6 +4029,10 @@ footer {
   .app-shell,
   .public-page {
     padding: 0 18px;
+  }
+
+  .public-page.onboarding-page {
+    padding-top: 32px;
   }
 
   .app-header {
@@ -3933,9 +4127,20 @@ footer {
     padding: 24px 20px;
   }
 
+  .settings-page-head,
   .setting-group {
     grid-template-columns: 1fr;
     gap: 8px;
+  }
+
+  .settings-page-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .settings-page-grid .setting-group {
+    grid-template-columns: 1fr;
+    gap: 10px;
   }
 
   .setting-group > legend {

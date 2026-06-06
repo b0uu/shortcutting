@@ -4,7 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 type PanelRouteLinkProps = {
-  panel: "history" | "settings";
+  panel: "history";
   children: ReactNode;
 };
 

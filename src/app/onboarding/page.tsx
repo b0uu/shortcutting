@@ -8,7 +8,8 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { importLocalHistoryOnce } from "@/storage/cloudImport";
 import { LocalResultLogger } from "@/storage/localResultLogger";
 
-type OnboardingPhase = "checking" | "email" | "sent" | "profile" | "saving" | "importing" | "redirecting" | "unconfigured" | "error";
+type OnboardingPhase = "checking" | "email" | "sent" | "profile" | "reset" | "saving" | "importing" | "redirecting" | "unconfigured" | "error";
+type AuthMode = "signup" | "signin";
 
 type ProfileResponse = {
   profile?: AccountProfile;
@@ -33,7 +34,9 @@ export default function OnboardingPage() {
   const localLogger = useMemo(() => new LocalResultLogger(), []);
   const redirectTimer = useRef<number | null>(null);
   const [phase, setPhase] = useState<OnboardingPhase>("checking");
+  const [authMode, setAuthMode] = useState<AuthMode>("signup");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [profile, setProfile] = useState<AccountProfile | null>(null);
   const [handle, setHandle] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -111,7 +114,14 @@ export default function OnboardingPage() {
 
       if (!data.session?.user) {
         setPhase("email");
-        setMessage("Enter your email to continue.");
+        setMessage("Enter your email and password to continue.");
+        return;
+      }
+
+      const resetRequested = new URLSearchParams(window.location.search).get("reset") === "1";
+      if (resetRequested) {
+        setPhase("reset");
+        setMessage("Choose a new password.");
         return;
       }
 
@@ -149,17 +159,79 @@ export default function OnboardingPage() {
   async function submitEmail(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmedEmail = email.trim();
+    if (!trimmedEmail || !password || !supabase) return;
+
+    setPending(true);
+    setMessage(authMode === "signup" ? "Creating account..." : "Signing in...");
+    const callbackUrl = new URL("/auth/callback", authRedirectOrigin());
+    callbackUrl.searchParams.set("next", "/onboarding?setup=1");
+    const authResponse = authMode === "signup"
+      ? await supabase.auth.signUp({
+        email: trimmedEmail,
+        password,
+        options: {
+          emailRedirectTo: callbackUrl.toString(),
+        },
+      })
+      : await supabase.auth.signInWithPassword({
+        email: trimmedEmail,
+        password,
+      });
+    setPending(false);
+
+    if (authResponse.error) {
+      setPhase("error");
+      setOnboardingError({ message: normalizeAuthMessage(authResponse.error.message), action: "retry-email" });
+      setMessage(normalizeAuthMessage(authResponse.error.message));
+      return;
+    }
+
+    if (!authResponse.data.session?.user) {
+      setPhase("sent");
+      setMessage("Check your email, then return here to sign in.");
+      return;
+    }
+
+    await prepareProfileAfterAuth();
+  }
+
+  async function requestPasswordReset() {
+    const trimmedEmail = email.trim();
     if (!trimmedEmail || !supabase) return;
 
     setPending(true);
-    setMessage("Sending magic link...");
+    setMessage("Sending reset link...");
+    const callbackUrl = new URL("/auth/callback", authRedirectOrigin());
+    callbackUrl.searchParams.set("next", "/onboarding?reset=1");
+    const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
+      redirectTo: callbackUrl.toString(),
+    });
+    setPending(false);
+
+    if (error) {
+      setPhase("error");
+      setOnboardingError({ message: normalizeAuthMessage(error.message), action: "retry-email" });
+      setMessage(normalizeAuthMessage(error.message));
+      return;
+    }
+
+    setPhase("sent");
+    setMessage("Check your email for the reset link.");
+  }
+
+  async function requestOneTimeLink() {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || !supabase) return;
+
+    setPending(true);
+    setMessage("Sending one-time link...");
     const callbackUrl = new URL("/auth/callback", authRedirectOrigin());
     callbackUrl.searchParams.set("next", "/onboarding?setup=1");
     const { error } = await supabase.auth.signInWithOtp({
       email: trimmedEmail,
       options: {
         emailRedirectTo: callbackUrl.toString(),
-        shouldCreateUser: true,
+        shouldCreateUser: false,
       },
     });
     setPending(false);
@@ -172,7 +244,44 @@ export default function OnboardingPage() {
     }
 
     setPhase("sent");
-    setMessage("Check your email for the sign-in link.");
+    setMessage("Check your email for the one-time link.");
+  }
+
+  async function submitPasswordReset(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!password || !supabase) return;
+
+    setPending(true);
+    setMessage("Updating password...");
+    const { error } = await supabase.auth.updateUser({ password });
+    setPending(false);
+
+    if (error) {
+      setPhase("reset");
+      setMessage(normalizeAuthMessage(error.message));
+      return;
+    }
+
+    await prepareProfileAfterAuth();
+  }
+
+  async function prepareProfileAfterAuth() {
+    setPhase("checking");
+    setMessage("Preparing your profile...");
+    try {
+      const response = await fetch("/api/me/profile");
+      const payload = await readJsonResponse<ProfileResponse>(response, "Could not load profile.");
+      if (!response.ok || !payload.profile) {
+        throw new Error(payload.error ?? "Could not load profile.");
+      }
+      loadProfileDraft(payload.profile);
+      setPhase("profile");
+      setMessage("Confirm your public profile before we open it.");
+    } catch (error) {
+      setPhase("error");
+      setOnboardingError({ message: error instanceof Error ? error.message : "Could not finish onboarding.", action: "retry-email" });
+      setMessage(error instanceof Error ? error.message : "Could not finish onboarding.");
+    }
   }
 
   async function finishProfile(event: React.FormEvent<HTMLFormElement>) {
@@ -256,8 +365,24 @@ export default function OnboardingPage() {
           ) : phase === "sent" || busy ? (
             <div className="auth-progress" aria-live="polite">
               <span className="auth-progress-dot" />
-              <span>{phase === "sent" ? "waiting for email confirmation" : "syncing account"}</span>
+              <span>{phase === "sent" ? "check your inbox" : "syncing account"}</span>
             </div>
+          ) : phase === "reset" ? (
+            <form className="account-signin" onSubmit={submitPasswordReset}>
+              <label className="account-field full">
+                <span>new password</span>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={password}
+                  placeholder="8 characters or more"
+                  onChange={(event) => setPassword(event.currentTarget.value)}
+                />
+              </label>
+              <button type="submit" className="btn-primary" disabled={pending || password.length < 6}>
+                {pending ? "saving" : "save password"}
+              </button>
+            </form>
           ) : phase === "profile" ? (
             <form className="onboarding-profile-form" onSubmit={finishProfile}>
               <label className="account-field">
@@ -303,15 +428,23 @@ export default function OnboardingPage() {
                   onClick={() => {
                     setPhase("email");
                     setOnboardingError(null);
-                    setMessage("Enter your email to continue.");
+                    setMessage("Enter your email and password to continue.");
                   }}
                 >
-                  request a new link
+                  try again
                 </button>
               )}
             </div>
           ) : (
             <form className="account-signin" onSubmit={submitEmail}>
+              <div className="auth-mode-toggle" role="tablist" aria-label="account mode">
+                <button type="button" role="tab" aria-selected={authMode === "signup"} className={`opt-btn ${authMode === "signup" ? "active" : ""}`} onClick={() => setAuthMode("signup")}>
+                  sign up
+                </button>
+                <button type="button" role="tab" aria-selected={authMode === "signin"} className={`opt-btn ${authMode === "signin" ? "active" : ""}`} onClick={() => setAuthMode("signin")}>
+                  sign in
+                </button>
+              </div>
               <label className="account-field full">
                 <span>email</span>
                 <input
@@ -322,14 +455,34 @@ export default function OnboardingPage() {
                   onChange={(event) => setEmail(event.currentTarget.value)}
                 />
               </label>
-              <button type="submit" className="btn-primary" disabled={pending || !email.trim()}>
-                {pending ? "sending" : "send magic link"}
+              <label className="account-field full">
+                <span>password</span>
+                <input
+                  type="password"
+                  autoComplete={authMode === "signup" ? "new-password" : "current-password"}
+                  value={password}
+                  placeholder="8 characters or more"
+                  onChange={(event) => setPassword(event.currentTarget.value)}
+                />
+              </label>
+              <button type="submit" className="btn-primary" disabled={pending || !email.trim() || password.length < 6}>
+                {pending ? "working" : authMode === "signup" ? "create account" : "sign in"}
               </button>
+              {authMode === "signin" && (
+                <div className="auth-signin-secondary">
+                  <button type="button" className="btn-ghost auth-secondary-action" disabled={pending || !email.trim()} onClick={requestOneTimeLink}>
+                    send one-time link
+                  </button>
+                  <button type="button" className="btn-ghost auth-subtle-action" disabled={pending || !email.trim()} onClick={requestPasswordReset}>
+                    reset password
+                  </button>
+                </div>
+              )}
             </form>
           )}
 
           <p className="auth-footnote">
-            Email auth only. Profile and leaderboard settings can be changed later.
+            Email auth only. Verification may be requested later.
           </p>
         </div>
       </section>
@@ -386,7 +539,19 @@ function normalizeAuthMessage(message: string, code?: string): string {
     return "This email link is invalid or expired. Request a new link.";
   }
   if (normalized.includes("rate limit")) {
-    return "Too many email attempts. Wait a bit, then request a new link.";
+    return "Too many attempts. Wait a bit, then try again.";
+  }
+  if (normalized.includes("weak") || normalized.includes("password")) {
+    return "Use a stronger password, then try again.";
+  }
+  if (normalized.includes("already") || normalized.includes("registered")) {
+    return "That email already has an account. Try signing in.";
+  }
+  if (normalized.includes("invalid login") || normalized.includes("credentials")) {
+    return "Email or password is incorrect.";
+  }
+  if (normalized.includes("email not confirmed") || normalized.includes("not confirmed")) {
+    return "Check your email to verify this account, then sign in.";
   }
   if (normalized.includes("authentication required") || normalized.includes("not authenticated")) {
     return "Your session was not created. Request a new link.";
@@ -397,12 +562,13 @@ function normalizeAuthMessage(message: string, code?: string): string {
   if (normalized.includes("supabase is not configured")) {
     return "Supabase is not configured.";
   }
-  return message || "Authentication failed. Request a new link.";
+  return message || "Authentication failed. Try again.";
 }
 
 function headingForPhase(phase: OnboardingPhase): string {
   if (phase === "sent") return "check your email";
   if (phase === "profile") return "finish your profile";
+  if (phase === "reset") return "reset password";
   if (phase === "error") return "sign-in failed";
   if (phase === "unconfigured") return "setup required";
   if (phase === "checking" || phase === "saving" || phase === "importing" || phase === "redirecting") return "almost there";

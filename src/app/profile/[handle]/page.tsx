@@ -2,8 +2,9 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { PublicSiteHeader, PublicSiteHeaderFallback } from "@/components/layout/PublicSiteHeader";
 import { formatElapsed } from "@/domain/timer";
-import { getPublicProfileSummary } from "@/lib/supabase/cloudData";
-import { createSupabasePublicClient } from "@/lib/supabase/server";
+import { getProfileByUserId, getPublicProfileSummary } from "@/lib/supabase/cloudData";
+import { createSupabasePublicClient, createSupabaseServerClient } from "@/lib/supabase/server";
+import { SignOutButton } from "./SignOutButton";
 
 type ProfilePageProps = {
   params: Promise<{ handle: string }>;
@@ -37,6 +38,7 @@ async function ProfileContent({ handle }: { handle: string }) {
 
   const summary = await getPublicProfileSummary(client, handle);
   if (!summary) notFound();
+  const ownsProfile = await isSignedInProfile(summary.profile.handle);
 
   return (
       <section className="profile-main public-content-ready">
@@ -54,6 +56,7 @@ async function ProfileContent({ handle }: { handle: string }) {
             </div>
             {summary.profile.bio && <div className="identity-meta">{summary.profile.bio}</div>}
           </div>
+          {ownsProfile && <SignOutButton />}
         </div>
 
         <div className="pb-strip" aria-label="profile summary">
@@ -119,6 +122,17 @@ async function ProfileContent({ handle }: { handle: string }) {
         </div>
       </section>
   );
+}
+
+async function isSignedInProfile(handle: string): Promise<boolean> {
+  const authClient = await createSupabaseServerClient();
+  if (!authClient) return false;
+
+  const { data, error } = await authClient.auth.getUser();
+  if (error || !data.user) return false;
+
+  const profile = await getProfileByUserId(authClient, data.user.id);
+  return profile?.handle === handle;
 }
 
 function ProfileSkeleton({ handle }: { handle: string }) {

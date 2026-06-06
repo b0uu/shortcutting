@@ -1,4 +1,3 @@
-import type { RefObject } from "react";
 import Link from "next/link";
 import { ShortcutHint } from "@/components/ui/ShortcutHint";
 import type { Platform } from "@/domain/types";
@@ -8,12 +7,10 @@ type HeaderProps = {
   onHome: () => void;
   onHistory: () => void;
   accountHref: string;
-  onSettings: () => void;
   historyDisabled: boolean;
   leaderboardDisabled: boolean;
   accountDisabled: boolean;
   settingsDisabled: boolean;
-  settingsButtonRef: RefObject<HTMLButtonElement | null>;
   accountLabel: string;
 };
 
@@ -22,12 +19,10 @@ export function Header({
   onHome,
   onHistory,
   accountHref,
-  onSettings,
   historyDisabled,
   leaderboardDisabled,
   accountDisabled,
   settingsDisabled,
-  settingsButtonRef,
   accountLabel,
 }: HeaderProps) {
   const modifier = platform === "mac" ? "⌥" : "alt";
@@ -61,22 +56,23 @@ export function Header({
             <span>leaderboards</span>
           </Link>
         )}
-        <button
-          ref={settingsButtonRef}
-          type="button"
-          onClick={onSettings}
-          disabled={settingsDisabled}
-          aria-disabled={settingsDisabled}
-        >
-          <span>settings</span>
-          <ShortcutHint keys={["esc"]} />
-        </button>
-        {accountDisabled ? (
+        {settingsDisabled ? (
           <button type="button" disabled aria-disabled="true">
+            <span>settings</span>
+            <ShortcutHint keys={["esc"]} />
+          </button>
+        ) : (
+          <Link href="/settings">
+            <span>settings</span>
+            <ShortcutHint keys={["esc"]} />
+          </Link>
+        )}
+        {accountDisabled ? (
+          <button type="button" className="account-nav-item" disabled aria-disabled="true">
             <span>{accountLabel}</span>
           </button>
         ) : (
-          <Link href={accountHref}>
+          <Link href={accountHref} className="account-nav-item">
             <span>{accountLabel}</span>
           </Link>
         )}

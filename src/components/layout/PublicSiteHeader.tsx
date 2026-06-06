@@ -7,7 +7,7 @@ import { getProfileByUserId } from "@/lib/supabase/cloudData";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase/server";
 
 type PublicSiteHeaderProps = {
-  active?: "leaderboards" | "profile";
+  active?: "leaderboards" | "profile" | "settings";
   profileHref?: string;
   profileLabel?: string;
 };
@@ -33,11 +33,11 @@ export function PublicSiteHeaderFallback({
         <Link href="/leaderboards" aria-current={active === "leaderboards" ? "page" : undefined}>
           <span>leaderboards</span>
         </Link>
-        <PanelRouteLink panel="settings">
+        <Link href="/settings" aria-current={active === "settings" ? "page" : undefined}>
           <span>settings</span>
           <ShortcutHint keys={["esc"]} />
-        </PanelRouteLink>
-        <Link href="/onboarding" aria-current={active === "profile" ? "page" : undefined}>
+        </Link>
+        <Link href="/onboarding" className="account-nav-item" aria-current={active === "profile" ? "page" : undefined}>
           <span>profile</span>
         </Link>
       </nav>
@@ -74,11 +74,11 @@ export async function PublicSiteHeader({
         <Link href="/leaderboards" aria-current={active === "leaderboards" ? "page" : undefined}>
           <span>leaderboards</span>
         </Link>
-        <PanelRouteLink panel="settings">
+        <Link href="/settings" aria-current={active === "settings" ? "page" : undefined}>
           <span>settings</span>
           <ShortcutHint keys={["esc"]} />
-        </PanelRouteLink>
-        <Link href={resolvedProfileHref} aria-current={active === "profile" ? "page" : undefined}>
+        </Link>
+        <Link href={resolvedProfileHref} className="account-nav-item" aria-current={active === "profile" ? "page" : undefined}>
           <span>{resolvedProfileLabel}</span>
         </Link>
       </nav>

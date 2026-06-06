@@ -2,14 +2,15 @@
 
 import { MotionConfig } from "framer-motion";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { generateTargetChallenges, seedPack } from "@/domain/challenges";
+import { generateTargetChallenges } from "@/domain/challenges";
 import { generatePythonChallenges } from "@/domain/coding";
-import { generateDrillChallenges } from "@/domain/drills";
+import { defaultConfig } from "@/domain/defaultConfig";
+import { generateDrillChallenges, hintForDrill } from "@/domain/drills";
 import { changedTargetCharacterIndexes } from "@/domain/diff";
 import { createEditEvent } from "@/domain/events";
 import { detectPlatform, resolvePlatform } from "@/domain/platform";
 import { personalBestKey, summarizeResult } from "@/domain/results";
-import { colorsForTheme, darkThemeColors, themeCssVariables } from "@/domain/themes";
+import { colorsForTheme, themeCssVariables } from "@/domain/themes";
 import { getSelectionRange, setSelectionRange } from "@/domain/text";
 import {
   completeActiveSegment,
@@ -40,7 +41,6 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { Header } from "@/components/layout/Header";
 import { HistoryPanel } from "@/components/history/HistoryPanel";
 import { ShortcutMapPanel } from "@/components/shortcuts/ShortcutMapPanel";
-import { SettingsPanel } from "@/components/settings/SettingsPanel";
 import { ResultsScreen } from "@/components/results/ResultsScreen";
 import { ShortcutHint } from "@/components/ui/ShortcutHint";
 import { EditableSurface } from "./EditableSurface";
@@ -77,28 +77,12 @@ const QUICK_CROSSFADE_MS = 35;
 const RESULTS_CROSSFADE_MS = 220;
 const ROUTE_PANEL_OPEN_DELAY_MS = 260;
 
-const defaultConfig: TestConfig = {
-  mode: "target-match",
-  challengeCount: 3,
-  platformPreference: "auto",
-  platform: "windows-linux",
-  mousePolicy: "keyboard-only",
-  difficulty: "multiline",
-  soundEnabled: true,
-  theme: "dark",
-  customTheme: darkThemeColors,
-  codingLanguage: "python",
-  smartPairs: true,
-  reducedMotion: false,
-  seedPack,
-  practiceSkillPack: null,
-};
-
 export function GameApp() {
   const localLogger = useMemo(() => new LocalResultLogger(), []);
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [accountUser, setAccountUser] = useState<AccountUser | null>(null);
   const [accountProfile, setAccountProfile] = useState<AccountProfile | null>(null);
+  const [accountLoaded, setAccountLoaded] = useState(false);
   const cloudLogger = useMemo(() => accountUser ? new CloudResultLogger() : null, [accountUser]);
   const logger = useMemo(() => new HybridResultLogger(localLogger, cloudLogger), [cloudLogger, localLogger]);
   const [config, setConfig] = useState<TestConfig>(defaultConfig);
@@ -107,7 +91,6 @@ export function GameApp() {
   const [challenges, setChallenges] = useState(() => buildChallenges(defaultConfig));
   const [segments, setSegments] = useState<ChallengeSegment[]>(() => createSegments(challenges));
   const [selection, setSelection] = useState<SelectionState>(() => initialSelection(challenges[0]));
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [shortcutMapOpen, setShortcutMapOpen] = useState(false);
   const [showHint, setShowHint] = useState(false);
@@ -121,7 +104,6 @@ export function GameApp() {
   const [screenFading, setScreenFading] = useState(false);
   const screenFadeTimeout = useRef<number | null>(null);
 
-  const settingsButtonRef = useRef<HTMLButtonElement | null>(null);
   const runStartedAtIso = useRef<string | null>(null);
   const challengeResults = useRef<ChallengeResult[]>([]);
   const editEvents = useRef<EditEvent[]>([]);
@@ -176,7 +158,7 @@ export function GameApp() {
       const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
       const storedPanel = window.sessionStorage.getItem("shortcutting:open-panel");
       const panel = storedPanel ?? url.searchParams.get("panel") ?? hashParams.get("panel");
-      return panel === "history" || panel === "settings" ? panel : null;
+      return panel === "history" ? panel : null;
     }
 
     function clearRequestedPanel() {
@@ -193,11 +175,7 @@ export function GameApp() {
       if (!panel) return;
       if (openPanelTimeout) window.clearTimeout(openPanelTimeout);
       openPanelTimeout = window.setTimeout(() => {
-        if (panel === "history") {
-          setHistoryOpen(true);
-        } else {
-          setSettingsOpen(true);
-        }
+        setHistoryOpen(true);
         clearRequestedPanel();
       }, ROUTE_PANEL_OPEN_DELAY_MS);
     }
@@ -213,7 +191,12 @@ export function GameApp() {
   }, []);
 
   useEffect(() => {
-    if (!supabase) return;
+    if (!supabase) {
+      // Account chrome can stop reserving a loading label immediately when auth is not configured.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setAccountLoaded(true);
+      return;
+    }
     const supabaseClient = supabase;
     let cancelled = false;
 
@@ -223,9 +206,11 @@ export function GameApp() {
       if (!data.user) {
         setAccountUser(null);
         setAccountProfile(null);
+        setAccountLoaded(true);
         return;
       }
       await loadCloudAccount(data.user.id, data.user.email ?? null);
+      setAccountLoaded(true);
       await autoImportLocalHistory(data.user.id);
     }
 
@@ -234,10 +219,14 @@ export function GameApp() {
       if (!session?.user) {
         setAccountUser(null);
         setAccountProfile(null);
+        setAccountLoaded(true);
         return;
       }
       void loadCloudAccount(session.user.id, session.user.email ?? null)
-        .then(() => autoImportLocalHistory(session.user.id));
+        .then(() => {
+          setAccountLoaded(true);
+          return autoImportLocalHistory(session.user.id);
+        });
     });
 
     return () => {
@@ -313,23 +302,18 @@ export function GameApp() {
         return;
       }
 
-      if (settingsOpen && event.key === "Escape") {
-        closeSettings();
-        return;
-      }
-
       if (event.key === "Escape" && phaseRef.current !== "active") {
         openSettings();
         return;
       }
 
-      if (!settingsOpen && config.mode === "drill" && phase !== "complete" && isAltShortcut(event) && getSiteShortcutKey(event) === "r") {
+      if (config.mode === "drill" && phase !== "complete" && isAltShortcut(event) && getSiteShortcutKey(event) === "r") {
         event.preventDefault();
         resetCurrentDrill();
         return;
       }
 
-      if (settingsOpen || historyOpen || shortcutMapOpen || midChallenge || phase !== "pre-test" || !isAltShortcut(event)) {
+      if (historyOpen || shortcutMapOpen || midChallenge || phase !== "pre-test" || !isAltShortcut(event)) {
         return;
       }
 
@@ -355,7 +339,7 @@ export function GameApp() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [historyOpen, settingsOpen, shortcutMapOpen, phase, midChallenge, config.mode]);
+  }, [historyOpen, shortcutMapOpen, phase, midChallenge, config.mode]);
 
   const resetPreview = useCallback((nextConfig: TestConfig) => {
     clearScheduledWork();
@@ -430,7 +414,6 @@ export function GameApp() {
   }
 
   function goHome() {
-    closeSettings();
     closeHistory();
     closeShortcutMap();
     crossfadeToConfig(withFreshSeed(config));
@@ -754,7 +737,7 @@ export function GameApp() {
   }
 
   function openSettings() {
-    if (!midChallenge) setSettingsOpen(true);
+    if (!midChallenge) window.location.assign("/settings");
   }
 
   function openHistory() {
@@ -766,7 +749,6 @@ export function GameApp() {
   }
 
   function openShortcutMap() {
-    setSettingsOpen(false);
     setShortcutMapOpen(true);
   }
 
@@ -776,15 +758,6 @@ export function GameApp() {
 
   function closeShortcutMap() {
     setShortcutMapOpen(false);
-  }
-
-  function closeSettings() {
-    setSettingsOpen(false);
-    window.setTimeout(() => settingsButtonRef.current?.focus(), 0);
-  }
-
-  async function resetLocalData() {
-    await localLogger.clearLocalResults();
   }
 
   async function loadCloudAccount(userId: string, email: string | null) {
@@ -842,22 +815,21 @@ export function GameApp() {
     "--active-rail-height": `${activeRailHeightFor(config.mode, currentText)}px`,
   } as CSSProperties;
   const accountHref = accountProfile?.handle ? `/profile/${accountProfile.handle}` : "/onboarding";
+  const activeHintText = showHint ? hintTextForChallenge(challenge, config.platform, currentText) : null;
   return (
     <MotionConfig reducedMotion={config.reducedMotion ? "always" : "user"}>
     <div className="app-shell" data-theme={config.theme} style={activeThemeStyle}>
-      <div className="app-content" inert={settingsOpen || historyOpen || shortcutMapOpen ? true : undefined} aria-hidden={settingsOpen || historyOpen || shortcutMapOpen}>
+      <div className="app-content" inert={historyOpen || shortcutMapOpen ? true : undefined} aria-hidden={historyOpen || shortcutMapOpen}>
       <Header
         platform={config.platform}
         onHome={goHome}
         onHistory={openHistory}
         accountHref={accountHref}
-        onSettings={openSettings}
         historyDisabled={midChallenge}
         leaderboardDisabled={midChallenge}
         accountDisabled={midChallenge}
         settingsDisabled={midChallenge}
-        settingsButtonRef={settingsButtonRef}
-        accountLabel={accountUser ? accountProfile?.handle ?? "account" : "sign in"}
+        accountLabel={!accountLoaded ? "account" : accountUser ? accountProfile?.handle ?? "account" : "sign in"}
       />
       {phase !== "complete" && (
         <ModeBar
@@ -925,7 +897,7 @@ export function GameApp() {
                     <EditableSurface
                       challenge={challenge}
                       active={active}
-                      focusLocked={!settingsOpen}
+                      focusLocked
                       currentText={currentText}
                       targetText={challenge.targetText}
                       showDiff={false}
@@ -940,6 +912,11 @@ export function GameApp() {
                       onMouseDown={handleMouseDown}
                       onClipboard={handleClipboard}
                     />
+                    {activeHintText && (
+                      <div className="active-hint-text" id="hint-text" data-testid="hint">
+                        {activeHintText}
+                      </div>
+                    )}
                   </div>
                 )}
                 {drillResetVisible && (
@@ -988,14 +965,6 @@ export function GameApp() {
         </footer>
       )}
       </div>
-      <SettingsPanel
-        open={settingsOpen}
-        config={config}
-        onClose={closeSettings}
-        onChange={updateConfig}
-        onShortcutMap={openShortcutMap}
-        onResetLocalData={resetLocalData}
-      />
       <HistoryPanel
         open={historyOpen}
         logger={logger}
@@ -1188,6 +1157,30 @@ function normalizeChallengeCountForMode(config: TestConfig): TestConfig {
     };
   }
   return defaultPartCounts.includes(config.challengeCount) ? config : { ...config, challengeCount: 3 };
+}
+
+function hintTextForChallenge(challenge: Challenge, platform: TestConfig["platform"], currentText: string): string {
+  if (challenge.mode === "drill") {
+    return hintForDrill(challenge, platform) ?? "Use the shortcut that matches the prompt, then leave the text exactly as requested.";
+  }
+
+  if (challenge.mode === "coding") {
+    if (challenge.skillPacks.includes("indentation")) return "Check line starts first. Missing indentation is marked in green.";
+    if (challenge.skillPacks.includes("argument-cleanup")) return "Look for the call shape: parentheses, commas, and spacing.";
+    if (challenge.skillPacks.includes("string-cleanup")) return "Look for quotes or a small string wrap.";
+    if (challenge.skillPacks.includes("rename")) return "Jump to the repeated name and replace it consistently.";
+    if (challenge.skillPacks.includes("boolean-cleanup")) return "Check the condition for a missing or extra boolean word.";
+    return "Match the Python target exactly, including spaces and line breaks.";
+  }
+
+  const errors = new Set(challenge.errors.map((error) => error.type));
+  if (errors.has("extra-newline") || errors.has("missing-newline")) return "Line breaks count. Green marks show missing target whitespace; red marks show text to remove.";
+  if (errors.has("double-space") || errors.has("missing-space")) return "Spaces count. Check the marked gap before editing more text.";
+  if (errors.has("extra-word") || errors.has("extra-character")) return "Red marks show extra text that should be deleted.";
+  if (errors.has("missing-word") || errors.has("missing-character")) return "Green marks in the target show what the edit is still missing.";
+  if (errors.has("wrong-word") || errors.has("wrong-word-order")) return "Compare the word order and replace the mismatched word as a unit.";
+  if (currentText.length === challenge.targetText.length) return "Same length now. Look for casing, punctuation, or a swapped character.";
+  return "Match the target exactly. Whitespace, punctuation, and capitalization all count.";
 }
 
 function initialSelection(challenge: Challenge): SelectionState {

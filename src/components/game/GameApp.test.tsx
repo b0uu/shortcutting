@@ -154,7 +154,7 @@ describe("GameApp", () => {
     act(() => vi.advanceTimersByTime(5000));
 
     expect(screen.getByTestId("active-segment")).toHaveClass("hinting");
-    expect(screen.queryByTestId("hint")).not.toBeInTheDocument();
+    expect(screen.getByTestId("hint")).toBeInTheDocument();
     expect(document.querySelector(".diff-overlay")).not.toBeInTheDocument();
     expect(screen.getByTestId("locked-segment").textContent).toBe(firstTarget);
 
@@ -180,14 +180,10 @@ describe("GameApp", () => {
 
   it("blocks settings during an active run but opens before a run", () => {
     render(<GameApp />);
-    fireEvent.keyDown(window, { key: "Escape" });
-    expect(screen.getByRole("dialog", { name: /settings/i })).toBeInTheDocument();
-    fireEvent.keyDown(window, { key: "Escape" });
-    act(() => vi.advanceTimersByTime(260));
-
-    const settingsButton = screen.getByRole("button", { name: "settings" });
-    expect(settingsButton).not.toBeDisabled();
+    const settingsLink = screen.getByRole("link", { name: "settings" });
+    expect(settingsLink).toHaveAttribute("href", "/settings");
     beginRun();
+    const settingsButton = screen.getByRole("button", { name: "settings" });
     expect(settingsButton).toBeDisabled();
     expect(screen.getByTestId("editable-surface")).toHaveAttribute("contenteditable", "true");
 
@@ -196,19 +192,13 @@ describe("GameApp", () => {
     expect(settingsButton).toBeDisabled();
   });
 
-  it("opens settings, supports 4-part runs, updates theme, and returns focus on close", () => {
+  it("hydrates saved settings for 4-part runs and theme", () => {
+    window.localStorage.setItem("shortcutting:settings", JSON.stringify({ challengeCount: 4, theme: "light" }));
     render(<GameApp />);
-    const settingsButton = screen.getByRole("button", { name: "settings" });
-    fireEvent.click(settingsButton);
-    expect(screen.getByRole("dialog", { name: /settings/i })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "4" }));
-    fireEvent.click(screen.getByRole("button", { name: "light" }));
+
     expect(document.querySelector(".app-shell")).toHaveAttribute("data-theme", "light");
-    fireEvent.keyDown(screen.getByRole("dialog", { name: /settings/i }), { key: "Escape" });
-    act(() => vi.advanceTimersByTime(0));
     expect(screen.queryByRole("button", { name: /start challenge/i })).not.toBeInTheDocument();
     expect(document.querySelector(".pips")).toHaveAttribute("aria-label", "1 of 4 parts");
-    expect(settingsButton).toHaveFocus();
   });
 
   it("toggles light and dark themes from the footer", () => {
@@ -281,36 +271,26 @@ describe("GameApp", () => {
   });
 
   it("applies and persists custom theme colors from settings", () => {
+    window.localStorage.setItem("shortcutting:settings", JSON.stringify({
+      theme: "custom",
+      customTheme: { accent: "#336699" },
+    }));
     render(<GameApp />);
-    fireEvent.click(screen.getByRole("button", { name: "settings" }));
-    fireEvent.click(screen.getByRole("button", { name: "custom" }));
-    fireEvent.change(screen.getByLabelText("accent"), { target: { value: "#336699" } });
 
     const shell = document.querySelector<HTMLElement>(".app-shell");
     expect(shell).toHaveAttribute("data-theme", "custom");
     expect(shell?.style.getPropertyValue("--accent")).toBe("#336699");
-
-    const stored = JSON.parse(window.localStorage.getItem("shortcutting:settings") ?? "{}");
-    expect(stored.theme).toBe("custom");
-    expect(stored.customTheme.accent).toBe("#336699");
   });
 
-  it("persists detailed settings and resets local history without a browser popup", () => {
+  it("does not expose the removed settings popup from the game shell", () => {
     window.localStorage.setItem("shortcutting:results", JSON.stringify([{ id: "old" }]));
     window.localStorage.setItem("shortcutting:personal-bests", JSON.stringify({ best: { id: "old" } }));
     const confirmSpy = vi.spyOn(window, "confirm").mockImplementation(() => false);
 
     render(<GameApp />);
-    fireEvent.click(screen.getByRole("button", { name: "settings" }));
-    fireEvent.click(screen.getByRole("button", { name: "reduced" }));
-    fireEvent.click(screen.getByRole("button", { name: "smart pairs off" }));
-    fireEvent.click(screen.getByRole("button", { name: "reset history" }));
 
-    const stored = JSON.parse(window.localStorage.getItem("shortcutting:settings") ?? "{}");
-    expect(stored.reducedMotion).toBe(true);
-    expect(stored.smartPairs).toBe(false);
-    expect(window.localStorage.getItem("shortcutting:results")).toBeNull();
-    expect(window.localStorage.getItem("shortcutting:personal-bests")).toBeNull();
+    expect(screen.getByRole("link", { name: "settings" })).toHaveAttribute("href", "/settings");
+    expect(screen.queryByRole("dialog", { name: /settings/i })).not.toBeInTheDocument();
     expect(confirmSpy).not.toHaveBeenCalled();
     confirmSpy.mockRestore();
   });
@@ -338,11 +318,8 @@ describe("GameApp", () => {
   });
 
   it("completes a configured 4-part run", async () => {
+    window.localStorage.setItem("shortcutting:settings", JSON.stringify({ challengeCount: 4 }));
     render(<GameApp />);
-    fireEvent.click(screen.getByRole("button", { name: "settings" }));
-    fireEvent.click(screen.getByRole("button", { name: "4" }));
-    fireEvent.keyDown(screen.getByRole("dialog", { name: /settings/i }), { key: "Escape" });
-    act(() => vi.advanceTimersByTime(0));
 
     await completeRun(4);
 
@@ -352,10 +329,6 @@ describe("GameApp", () => {
 
   it("uses selected multi-line difficulty and validates exact newlines", async () => {
     render(<GameApp />);
-    fireEvent.click(screen.getByRole("button", { name: "settings" }));
-    fireEvent.click(screen.getByRole("button", { name: "multi-line" }));
-    fireEvent.keyDown(screen.getByRole("dialog", { name: /settings/i }), { key: "Escape" });
-    act(() => vi.advanceTimersByTime(0));
 
     expect(activeTargetText()).toContain("\n");
     completeActiveText(activeTargetText().replace("\n", " "));
@@ -378,11 +351,8 @@ describe("GameApp", () => {
   });
 
   it("records mouse actions in mouse-allowed mode", async () => {
+    window.localStorage.setItem("shortcutting:settings", JSON.stringify({ mousePolicy: "mouse-allowed" }));
     render(<GameApp />);
-    fireEvent.click(screen.getByRole("button", { name: "settings" }));
-    fireEvent.click(screen.getByRole("button", { name: "mouse allowed" }));
-    fireEvent.keyDown(screen.getByRole("dialog", { name: /settings/i }), { key: "Escape" });
-    act(() => vi.advanceTimersByTime(0));
 
     beginRun();
     expect(fireEvent.mouseDown(screen.getByTestId("editable-surface"))).toBe(true);
