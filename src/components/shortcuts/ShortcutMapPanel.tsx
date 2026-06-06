@@ -45,6 +45,13 @@ export function ShortcutMapPanel({ open, platform, onClose }: ShortcutMapPanelPr
         animate={{ y: 0 }}
         exit={{ y: 8, scale: 0.985 }}
         transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
+            onClose();
+          }
+        }}
       >
         <div className="panel-heading">
           <h2>shortcut map</h2>

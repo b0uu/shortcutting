@@ -124,8 +124,9 @@ function sameTokenKind(a: TextToken, b: TextToken): boolean {
   return tokenKind(a.value) === tokenKind(b.value);
 }
 
-function tokenKind(value: string): "word" | "space" | "punctuation" {
+function tokenKind(value: string): "word" | "space" | "newline" | "punctuation" {
   if (/^[A-Za-z0-9_]+$/.test(value)) return "word";
+  if (value === "\n") return "newline";
   if (/^\s$/.test(value)) return "space";
   return "punctuation";
 }
@@ -173,7 +174,7 @@ function nextDiffStatus(
 function visibleCharacter(value: string, status: DiffToken["status"]): string {
   if (status === "missing") return "\u2227";
   if (value === " ") return status === "same" ? " " : "\u00b7";
-  if (value === "\n") return "\u21b5";
+  if (value === "\n") return status === "extra" ? "join" : "\u21b5";
   return value;
 }
 

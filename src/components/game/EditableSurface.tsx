@@ -16,7 +16,7 @@ type EditableSurfaceProps = {
   initialSelection: SelectionState;
   resetKey: number;
   smartPairs: boolean;
-  onInputText: (text: string, selection: SelectionState) => void;
+  onInputText: (text: string, selection: SelectionState, options?: { startsRun?: boolean }) => void;
   onSelection: (selection: SelectionState) => void;
   onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => void;
   onMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void;
@@ -316,7 +316,7 @@ function extraTokenClass(value: string): string {
 function handleSmartKeyDown(
   event: React.KeyboardEvent<HTMLDivElement>,
   element: HTMLDivElement | null,
-  onInputText: (text: string, selection: SelectionState) => void,
+  onInputText: (text: string, selection: SelectionState, options?: { startsRun?: boolean }) => void,
 ) {
   if (!element || event.defaultPrevented) return;
   const selection = getSelectionRange(element);
@@ -441,9 +441,10 @@ function syncSmartText(
   element: HTMLDivElement,
   text: string,
   selection: SelectionState,
-  onInputText: (text: string, selection: SelectionState) => void,
+  onInputText: (text: string, selection: SelectionState, options?: { startsRun?: boolean }) => void,
+  options?: { startsRun?: boolean },
 ) {
   element.textContent = text;
   setSelectionRange(element, selection.start, selection.end);
-  onInputText(text, selection);
+  onInputText(text, selection, options);
 }

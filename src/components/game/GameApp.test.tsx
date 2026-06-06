@@ -252,6 +252,8 @@ describe("GameApp", () => {
 
   it("marks extra active edit text and clears the hint when corrected", async () => {
     render(<GameApp />);
+    fireEvent.click(screen.getByRole("button", { name: /show run options/i }));
+    fireEvent.click(screen.getByRole("button", { name: "standard" }));
     const target = activeTargetText();
 
     completeActiveText(`${target} extra`);
@@ -504,7 +506,8 @@ function completeActiveText(text: string) {
 }
 
 function activeTargetText() {
-  const target = document.querySelector(".target-block")?.textContent;
+  const target = document.querySelector<HTMLElement>(".target-block")?.dataset.targetText
+    ?? document.querySelector(".target-block")?.textContent;
   if (!target) throw new Error("Missing target text.");
   return target;
 }

@@ -79,7 +79,7 @@ export function ResultsScreen({ result, themeColors, onPlayAgain, onPracticeAgai
       backgroundColor: themeColors.background,
       scale: 2,
       width: 640,
-      height: 320,
+      height: 360,
       onclone: (doc) => {
         const card = doc.querySelector<HTMLElement>(".share-card");
         if (!card) return;
@@ -146,7 +146,7 @@ export function ResultsScreen({ result, themeColors, onPlayAgain, onPracticeAgai
     function handleKeyDown(event: KeyboardEvent) {
       if (document.querySelector("[aria-modal='true']")) return;
       if (!isAltShortcut(event)) return;
-      const key = event.key.toLowerCase();
+      const key = getResultShortcutKey(event);
       if (key === "d") {
         event.preventDefault();
         openShareCard();
@@ -290,7 +290,11 @@ function ShareCardDialog({
             exit={{ y: 8, scale: 0.985 }}
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             onKeyDown={(event) => {
-              if (event.key === "Escape") onClose();
+              if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                onClose();
+              }
             }}
           >
             <div className="panel-heading">
@@ -300,7 +304,7 @@ function ShareCardDialog({
             <div className="share-preview-panel" aria-label="share card preview">
               <div className="share-preview-image">
                 {image ? (
-                  <Image src={image.url} alt="Generated share card screenshot" width={640} height={320} unoptimized />
+                  <Image src={image.url} alt="Generated share card screenshot" width={640} height={360} unoptimized />
                 ) : (
                   <div className="share-preview-loading">rendering preview</div>
                 )}
@@ -326,6 +330,13 @@ function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob | null> {
   return new Promise((resolve) => {
     canvas.toBlob((blob) => resolve(blob), "image/png");
   });
+}
+
+function getResultShortcutKey(event: KeyboardEvent): string {
+  if (event.code === "KeyD") return "d";
+  if (event.code === "KeyP") return "p";
+  if (event.code === "KeyG") return "g";
+  return event.key.toLowerCase();
 }
 
 const playbackRows = [

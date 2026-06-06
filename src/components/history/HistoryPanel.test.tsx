@@ -86,7 +86,7 @@ describe("HistoryPanel", () => {
     expect(screen.getByLabelText("personal bests")).toHaveTextContent("target match");
     expect(screen.getByText("Fix this.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "show share card" }));
-    expect(screen.getByText(/challenge before \/ after/i)).toBeInTheDocument();
+    expect(screen.getByText(/clean keyboard run/i)).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("mode"), { target: { value: "target-match" } });
     await waitFor(() => expect(screen.getByText(/1 recent runs/i)).toBeInTheDocument());

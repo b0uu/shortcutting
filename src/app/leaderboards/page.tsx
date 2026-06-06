@@ -56,6 +56,7 @@ async function LeaderboardContent({ searchParams }: LeaderboardPageProps) {
                 key={item}
                 className={`filter-btn ${difficulty === item ? "active" : ""}`}
                 href={leaderboardHref({ mode, difficulty: item, challengeCount })}
+                prefetch={false}
               >
                 {item === "multiline" ? "multi-line" : item}
               </Link>
@@ -68,6 +69,7 @@ async function LeaderboardContent({ searchParams }: LeaderboardPageProps) {
                 key={item}
                 className={`filter-btn ${challengeCount === item ? "active" : ""}`}
                 href={leaderboardHref({ mode, difficulty, challengeCount: item })}
+                prefetch={false}
               >
                 {item} parts
               </Link>
@@ -80,6 +82,7 @@ async function LeaderboardContent({ searchParams }: LeaderboardPageProps) {
                 key={item}
                 className={`filter-btn ${mode === item ? "active" : ""}`}
                 href={leaderboardHref({ mode: item, difficulty, challengeCount })}
+                prefetch={false}
               >
                 {labelMode(item)}
               </Link>
@@ -125,7 +128,7 @@ async function LeaderboardContent({ searchParams }: LeaderboardPageProps) {
                 <tr key={entry.id}>
                   <td><span className={`rank ${rankTone(entry.rank)}`}>{entry.rank}</span></td>
                   <td>
-                    <Link className="lb-user" href={`/profile/${entry.handle}`}>
+                    <Link className="lb-user" href={`/profile/${entry.handle}`} prefetch={false}>
                       <span className="lb-avatar" aria-hidden="true">{initialsFor(entry.displayName, entry.handle)}</span>
                       <span className="lb-name">{entry.displayName}</span>
                     </Link>

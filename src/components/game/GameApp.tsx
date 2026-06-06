@@ -71,11 +71,11 @@ const defaultStats: ChallengeStats = {
 };
 
 const COMPLETION_FEEDBACK_MS = 300;
-const FINAL_COMPLETION_FEEDBACK_MS = 780;
+const FINAL_COMPLETION_FEEDBACK_MS = 60;
 const COMPLETION_FLASH_MS = 1200;
 const QUICK_CROSSFADE_MS = 35;
 const RESULTS_CROSSFADE_MS = 220;
-const ROUTE_PANEL_OPEN_DELAY_MS = 260;
+const ROUTE_PANEL_OPEN_DELAY_MS = 0;
 
 export function GameApp() {
   const localLogger = useMemo(() => new LocalResultLogger(), []);
@@ -292,6 +292,8 @@ export function GameApp() {
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
+      if (document.querySelector("[aria-modal='true']")) return;
+
       if (shortcutMapOpen && event.key === "Escape") {
         closeShortcutMap();
         return;
@@ -307,9 +309,9 @@ export function GameApp() {
         return;
       }
 
-      if (config.mode === "drill" && phase !== "complete" && isAltShortcut(event) && getSiteShortcutKey(event) === "r") {
+      if (phase !== "complete" && isAltShortcut(event) && getSiteShortcutKey(event) === "r") {
         event.preventDefault();
-        resetCurrentDrill();
+        resetShortcutAction();
         return;
       }
 
@@ -460,8 +462,11 @@ export function GameApp() {
 
   function handleEditorKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     if (!active) return;
-    if (isSiteShortcut(event)) {
+    const siteShortcut = getSiteShortcutKey(event);
+    if (siteShortcut && isAltShortcut(event)) {
       event.preventDefault();
+      event.stopPropagation();
+      runSiteShortcut(siteShortcut);
       return;
     }
     if (phaseRef.current === "pre-test" && !isRunStartingEditorKey(event)) return;
@@ -494,8 +499,8 @@ export function GameApp() {
     }));
   }
 
-  function handleInputText(text: string, nextSelection: SelectionState) {
-    startRunFromEditorInput();
+  function handleInputText(text: string, nextSelection: SelectionState, options: { startsRun?: boolean } = {}) {
+    if (options.startsRun !== false) startRunFromEditorInput();
     setSegments((currentSegments) => {
       const nextSegments = updateActiveSegmentText(currentSegments, text);
       segmentsRef.current = nextSegments;
@@ -592,6 +597,33 @@ export function GameApp() {
     if (phaseRef.current === "active") scheduleHint();
   }
 
+  function resetShortcutAction() {
+    if (config.mode === "drill" && phaseRef.current === "active") {
+      resetCurrentDrill();
+      return;
+    }
+    resetWithFreshSeed();
+  }
+
+  function runSiteShortcut(key: "1" | "2" | "3" | "h" | "y" | "r") {
+    if (phaseRef.current !== "complete" && key === "r") {
+      resetShortcutAction();
+      return;
+    }
+    if (historyOpen || shortcutMapOpen || midChallenge || phaseRef.current !== "pre-test") return;
+    if (key === "1") {
+      changeMode("target-match");
+    } else if (key === "2") {
+      changeMode("drill");
+    } else if (key === "3") {
+      changeMode("coding");
+    } else if (key === "h") {
+      goHome();
+    } else if (key === "y") {
+      openHistory();
+    }
+  }
+
   function maybeComplete(text: string, nextSelection: SelectionState) {
     if (completing.current || phaseRef.current !== "active") return;
     if (!validateChallenge(currentChallengeRef.current, text, nextSelection)) return;
@@ -664,17 +696,15 @@ export function GameApp() {
   }
 
   function beginResultsReveal(completedAt: number) {
-    setScreenFading(true);
     if (screenFadeTimeout.current) window.clearTimeout(screenFadeTimeout.current);
-    screenFadeTimeout.current = window.setTimeout(() => {
-      void finalizeRun(completedAt).then(() => {
-        if (screenFadeTimeout.current) window.clearTimeout(screenFadeTimeout.current);
-        screenFadeTimeout.current = window.setTimeout(() => {
-          setScreenFading(false);
-          screenFadeTimeout.current = null;
-        }, RESULTS_CROSSFADE_MS);
-      });
-    }, RESULTS_CROSSFADE_MS);
+    void finalizeRun(completedAt).then(() => {
+      setScreenFading(true);
+      if (screenFadeTimeout.current) window.clearTimeout(screenFadeTimeout.current);
+      screenFadeTimeout.current = window.setTimeout(() => {
+        setScreenFading(false);
+        screenFadeTimeout.current = null;
+      }, RESULTS_CROSSFADE_MS);
+    });
   }
 
   async function finalizeRun(completedAt: number) {
@@ -682,7 +712,7 @@ export function GameApp() {
     const elapsedMs = startedAtMs === null ? 0 : Math.max(0, completedAt - startedAtMs - feedbackPausedMs.current);
     const startedAt = runStartedAtIso.current ?? new Date().toISOString();
     const completedAtIso = new Date().toISOString();
-    const bests = await logger.getPersonalBests();
+    const bests = await localLogger.getPersonalBests();
     const draftConfig = config;
     const key = personalBestKey(draftConfig);
     const best = bests[key];
@@ -812,7 +842,7 @@ export function GameApp() {
   const hasCompletedSegments = showCompletedSegments && segments.some((segment) => segment.status === "complete");
   const drillResetVisible = config.mode === "drill" && phase === "active";
   const activeSegmentStyle = {
-    "--active-rail-height": `${activeRailHeightFor(config.mode, currentText)}px`,
+    "--active-rail-height": `${activeRailHeightFor(config.mode, config.difficulty, currentText)}px`,
   } as CSSProperties;
   const accountHref = accountProfile?.handle ? `/profile/${accountProfile.handle}` : "/onboarding";
   const activeHintText = showHint ? hintTextForChallenge(challenge, config.platform, currentText) : null;
@@ -866,6 +896,7 @@ export function GameApp() {
                 key={challenge.id}
                 className={`target-block ${partTransition ? "target-switched" : ""}`}
                 id="target-text"
+                data-target-text={challenge.mode === "drill" ? undefined : challenge.targetText}
               >
                 {challenge.mode === "drill"
                   ? challenge.prompt
@@ -934,12 +965,12 @@ export function GameApp() {
       </main>
       {phase !== "complete" && (
         <footer>
-          <span className="footer-reset-indicator">
+          <button type="button" className="footer-keyboard footer-reset-indicator" onClick={resetShortcutAction}>
             <kbd className="kbd">{config.platform === "mac" ? "⌥" : "alt"}</kbd>
             <kbd className="kbd">R</kbd>
             reset
-          </span>
-          <span><kbd className="kbd">esc</kbd> settings</span>
+          </button>
+          {!midChallenge && <span><kbd className="kbd">esc</kbd> settings</span>}
           <button
             type="button"
             className="footer-keyboard"
@@ -1086,11 +1117,12 @@ function buildTargetHighlightMap(text: string, ranges: Challenge["attentionRange
   return highlighted;
 }
 
-function activeRailHeightFor(mode: Mode, text: string): number {
-  const lineHeight = mode === "drill" ? 34 : 34;
+function activeRailHeightFor(mode: Mode, difficulty: TestConfig["difficulty"], text: string): number {
+  const lineHeight = 34;
   if (mode === "drill") return lineHeight;
   const lineCount = Math.min(3, Math.max(1, text.split("\n").length));
-  return lineHeight * lineCount;
+  const maximum = difficulty === "multiline" ? 106 : 92;
+  return Math.min(maximum, Math.max(30, lineHeight * lineCount));
 }
 
 function buildChallenges(config: TestConfig): Challenge[] {
@@ -1217,11 +1249,6 @@ type ShortcutKeyEvent = Pick<KeyboardEvent | React.KeyboardEvent, "altKey" | "ct
 
 function isAltShortcut(event: ShortcutKeyEvent): boolean {
   return event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
-}
-
-function isSiteShortcut(event: ShortcutKeyEvent): boolean {
-  if (!isAltShortcut(event)) return false;
-  return getSiteShortcutKey(event) !== null;
 }
 
 function getSiteShortcutKey(event: ShortcutKeyEvent): "1" | "2" | "3" | "h" | "y" | "r" | null {

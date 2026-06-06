@@ -12,12 +12,8 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(function Sha
   { result, themeColors },
   ref,
 ) {
-  const selectedChallenge = result.challengeResults.find((item) => item.challengeId === result.shareChallengeId)
-    ?? result.challengeResults.at(-1)
-    ?? result.challengeResults[0];
-  const beforeText = selectedChallenge?.beforeText ?? "";
-  const targetText = selectedChallenge?.targetText ?? "";
-  const finalText = result.challengeResults.map((item) => item.finalText).join("\n");
+  const cleanRun = result.hintsUsed === 0 && result.mouseActions === 0 && result.clipboardActions === 0;
+  const resultLabel = cleanRun ? "clean keyboard run" : "completed run";
 
   return (
     <div className="share-card" ref={ref} style={themeCssVariables(themeColors)} data-theme={result.config.theme}>
@@ -31,21 +27,22 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(function Sha
         <em>shortcutting</em>
       </div>
       <div className="share-right">
-        <p>challenge before / after</p>
-        <div className="share-pair">
-          <div className="share-pane">
-            <span className="share-pane-label">before</span>
-            <span className="before">{beforeText}</span>
+        <p>{resultLabel}</p>
+        <div className="share-metrics" aria-label="run stats">
+          <div className="share-stat">
+            <strong>{result.editsPerMinute}</strong>
+            <span>epm</span>
           </div>
-          <div className="share-pane">
-            <span className="share-pane-label">after</span>
-            <span className="after">{targetText}</span>
+          <div className="share-stat">
+            <strong>{result.totalKeystrokes}</strong>
+            <span>keys</span>
+          </div>
+          <div className="share-stat">
+            <strong>{result.estimatedCorrectionCount}</strong>
+            <span>fixes</span>
           </div>
         </div>
-        <small>
-          final text matched: {result.totalKeystrokes} keystrokes, {result.hintsUsed} hints, {result.mouseActions} mouse actions
-          <span className="share-final" aria-label="Final text">{finalText}</span>
-        </small>
+        <small>{result.hintsUsed} hints, {result.mouseActions} mouse actions, {result.clipboardActions} clipboard actions</small>
       </div>
     </div>
   );

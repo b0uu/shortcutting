@@ -11,11 +11,8 @@ export class HybridResultLogger implements ResultLogger {
     const localResult = await this.localLogger.saveResult(result);
     if (!this.cloudLogger) return localResult;
 
-    try {
-      return await this.cloudLogger.saveResult(localResult);
-    } catch {
-      return localResult;
-    }
+    void this.cloudLogger.saveResult(localResult).catch(() => {});
+    return localResult;
   }
 
   async getResults(): Promise<TestResult[]> {
