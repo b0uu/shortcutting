@@ -83,6 +83,7 @@ export function GameApp() {
   const [accountUser, setAccountUser] = useState<AccountUser | null>(null);
   const [accountProfile, setAccountProfile] = useState<AccountProfile | null>(null);
   const [accountLoaded, setAccountLoaded] = useState(false);
+  const accountHref = accountProfile?.handle ? `/profile/${accountProfile.handle}` : "/onboarding";
   const cloudLogger = useMemo(() => accountUser ? new CloudResultLogger() : null, [accountUser]);
   const logger = useMemo(() => new HybridResultLogger(localLogger, cloudLogger), [cloudLogger, localLogger]);
   const [config, setConfig] = useState<TestConfig>(defaultConfig);
@@ -335,13 +336,19 @@ export function GameApp() {
       } else if (key === "y") {
         event.preventDefault();
         openHistory();
+      } else if (key === "l") {
+        event.preventDefault();
+        window.location.assign("/leaderboards");
+      } else if (key === "a") {
+        event.preventDefault();
+        window.location.assign(accountHref);
       }
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [historyOpen, shortcutMapOpen, phase, midChallenge, config.mode]);
+  }, [accountHref, historyOpen, shortcutMapOpen, phase, midChallenge, config.mode]);
 
   const resetPreview = useCallback((nextConfig: TestConfig) => {
     clearScheduledWork();
@@ -605,7 +612,7 @@ export function GameApp() {
     resetWithFreshSeed();
   }
 
-  function runSiteShortcut(key: "1" | "2" | "3" | "h" | "y" | "r") {
+  function runSiteShortcut(key: SiteShortcutKey) {
     if (phaseRef.current !== "complete" && key === "r") {
       resetShortcutAction();
       return;
@@ -621,6 +628,10 @@ export function GameApp() {
       goHome();
     } else if (key === "y") {
       openHistory();
+    } else if (key === "l") {
+      window.location.assign("/leaderboards");
+    } else if (key === "a") {
+      window.location.assign(accountHref);
     }
   }
 
@@ -845,7 +856,6 @@ export function GameApp() {
   const activeSegmentStyle = {
     "--active-rail-height": `${activeRailHeightFor(config.mode, config.difficulty, currentText)}px`,
   } as CSSProperties;
-  const accountHref = accountProfile?.handle ? `/profile/${accountProfile.handle}` : "/onboarding";
   const activeHintText = showHint ? hintTextForChallenge(challenge, config.platform, currentText) : null;
   return (
     <MotionConfig reducedMotion={config.reducedMotion ? "always" : "user"}>
@@ -1254,28 +1264,31 @@ function isRunStartingEditorKey(event: React.KeyboardEvent<HTMLDivElement>): boo
 }
 
 type ShortcutKeyEvent = Pick<KeyboardEvent | React.KeyboardEvent, "altKey" | "ctrlKey" | "metaKey" | "shiftKey" | "key" | "code">;
+type SiteShortcutKey = "1" | "2" | "3" | "h" | "y" | "l" | "a" | "r";
 
 function isAltShortcut(event: ShortcutKeyEvent): boolean {
   return event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
 }
 
-function getSiteShortcutKey(event: ShortcutKeyEvent): "1" | "2" | "3" | "h" | "y" | "r" | null {
+function getSiteShortcutKey(event: ShortcutKeyEvent): SiteShortcutKey | null {
   const keyFromCode = shortcutKeyFromCode(event.code);
   if (keyFromCode) return keyFromCode;
 
   const key = event.key.toLowerCase();
-  if (key === "1" || key === "2" || key === "3" || key === "h" || key === "y" || key === "r") {
+  if (key === "1" || key === "2" || key === "3" || key === "h" || key === "y" || key === "l" || key === "a" || key === "r") {
     return key;
   }
   return null;
 }
 
-function shortcutKeyFromCode(code: string): "1" | "2" | "3" | "h" | "y" | "r" | null {
+function shortcutKeyFromCode(code: string): SiteShortcutKey | null {
   if (code === "Digit1") return "1";
   if (code === "Digit2") return "2";
   if (code === "Digit3") return "3";
   if (code === "KeyH") return "h";
   if (code === "KeyY") return "y";
+  if (code === "KeyL") return "l";
+  if (code === "KeyA") return "a";
   if (code === "KeyR") return "r";
   return null;
 }

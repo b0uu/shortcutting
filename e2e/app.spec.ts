@@ -114,6 +114,19 @@ test("loads the shortcutting ready editor", async ({ page }) => {
   await expect(page.getByTestId("timer")).toHaveText("00:00.0");
 });
 
+test("supports leaderboard and profile navigation shortcuts", async ({ page }) => {
+  await page.goto("/?seed=standard-v1");
+  await expect(page.getByRole("link", { name: /leaderboards/i }).locator(".shortcut-hint")).toBeVisible();
+
+  await page.keyboard.press("Alt+L");
+  await expect(page).toHaveURL(/\/leaderboards/);
+  await page.waitForLoadState("networkidle");
+  await expect(page.getByRole("link", { name: /profile/i }).locator(".shortcut-hint")).toBeVisible();
+
+  await page.keyboard.press("Alt+A");
+  await expect(page).toHaveURL(/\/onboarding/);
+});
+
 test("morphs run options without layout shift and avoids browser dialogs", async ({ page }) => {
   const dialogs: string[] = [];
   page.on("dialog", async (dialog) => {
@@ -526,6 +539,7 @@ test("keeps drill reset below the active editing line", async ({ page }) => {
   await page.goto("/?seed=standard-v1");
   await page.getByRole("button", { name: "drill" }).click();
   const editor = page.getByTestId("editable-surface");
+  const initialText = await editor.textContent();
 
   await expect.poll(async () => page.evaluate(() => {
     const active = document.querySelector<HTMLElement>(".active-segment");
@@ -538,6 +552,8 @@ test("keeps drill reset below the active editing line", async ({ page }) => {
   await editor.press("Backspace");
   await expect(page.getByTestId("drill-safety")).toBeVisible();
   await expect(page.getByRole("button", { name: /reset drill/i }).locator(".shortcut-hint")).toBeVisible();
+  await page.keyboard.press("Alt+R");
+  await expect(editor).toHaveText(initialText ?? "");
 
   const activeBox = await page.getByTestId("active-segment").boundingBox();
   const resetBox = await page.getByTestId("drill-safety").boundingBox();
@@ -561,7 +577,7 @@ test("keeps drill completion rail anchored to the active line", async ({ page })
     const activeRect = active.getBoundingClientRect();
     const resetRect = reset.getBoundingClientRect();
     const style = getComputedStyle(active, "::after");
-    const railBottom = activeRect.bottom - Number.parseFloat(style.bottom);
+    const railBottom = activeRect.top + Number.parseFloat(style.top) + Number.parseFloat(style.height);
     return railBottom - resetRect.top;
   })).toBeLessThanOrEqual(0);
   await expect.poll(async () => page.evaluate(() => {

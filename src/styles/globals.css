@@ -894,12 +894,12 @@ main.screen-crossfade {
   animation-duration: 1.38s;
 }
 
-.drill-view .editor-flow.matched .active-segment::after {
-  bottom: 8px;
-}
-
 .drill-view .active-segment::before {
   top: 8px;
+  height: var(--active-rail-height, 34px);
+}
+
+.drill-view .editor-flow.matched .active-segment::after {
   height: var(--active-rail-height, 34px);
 }
 

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 import { PanelRouteLink } from "@/components/layout/PanelRouteLink";
+import { PublicNavShortcuts } from "@/components/layout/PublicNavShortcuts";
 import { ShortcutHint } from "@/components/ui/ShortcutHint";
 import { detectPlatform } from "@/domain/platform";
 import { getProfileByUserId } from "@/lib/supabase/cloudData";
@@ -17,6 +18,7 @@ export function PublicSiteHeaderFallback({
 }: Pick<PublicSiteHeaderProps, "active">) {
   return (
     <header className="app-header public-app-header public-app-header-fallback">
+      <PublicNavShortcuts profileHref="/onboarding" />
       <Link href="/" className="logo" aria-label="Back to shortcutting home">
         <span className="logo-mark" aria-hidden="true">&#8997;</span>
         <span>shortcutting</span>
@@ -32,6 +34,7 @@ export function PublicSiteHeaderFallback({
         </PanelRouteLink>
         <Link href="/leaderboards" aria-current={active === "leaderboards" ? "page" : undefined}>
           <span>leaderboards</span>
+          <ShortcutHint keys={["alt", "L"]} />
         </Link>
         <Link href="/settings" aria-current={active === "settings" ? "page" : undefined}>
           <span>settings</span>
@@ -39,6 +42,7 @@ export function PublicSiteHeaderFallback({
         </Link>
         <Link href="/onboarding" className="account-nav-item" aria-current={active === "profile" ? "page" : undefined}>
           <span>profile</span>
+          <ShortcutHint keys={["alt", "A"]} />
         </Link>
       </nav>
     </header>
@@ -58,6 +62,7 @@ export async function PublicSiteHeader({
 
   return (
     <header className="app-header public-app-header">
+      <PublicNavShortcuts profileHref={resolvedProfileHref} />
       <Link href="/" className="logo" aria-label="Back to shortcutting home">
         <span className="logo-mark" aria-hidden="true">&#8997;</span>
         <span>shortcutting</span>
@@ -73,6 +78,7 @@ export async function PublicSiteHeader({
         </PanelRouteLink>
         <Link href="/leaderboards" aria-current={active === "leaderboards" ? "page" : undefined}>
           <span>leaderboards</span>
+          <ShortcutHint keys={[modifier, "L"]} />
         </Link>
         <Link href="/settings" aria-current={active === "settings" ? "page" : undefined}>
           <span>settings</span>
@@ -80,6 +86,7 @@ export async function PublicSiteHeader({
         </Link>
         <Link href={resolvedProfileHref} className="account-nav-item" aria-current={active === "profile" ? "page" : undefined}>
           <span>{resolvedProfileLabel}</span>
+          <ShortcutHint keys={[modifier, "A"]} />
         </Link>
       </nav>
     </header>

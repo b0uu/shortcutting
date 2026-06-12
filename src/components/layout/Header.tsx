@@ -50,10 +50,12 @@ export function Header({
         {leaderboardDisabled ? (
           <button type="button" disabled aria-disabled="true">
             <span>leaderboards</span>
+            <ShortcutHint keys={[modifier, "L"]} />
           </button>
         ) : (
           <Link href="/leaderboards">
             <span>leaderboards</span>
+            <ShortcutHint keys={[modifier, "L"]} />
           </Link>
         )}
         {settingsDisabled ? (
@@ -70,10 +72,12 @@ export function Header({
         {accountDisabled ? (
           <button type="button" className="account-nav-item" disabled aria-disabled="true">
             <span>{accountLabel}</span>
+            <ShortcutHint keys={[modifier, "A"]} />
           </button>
         ) : (
           <Link href={accountHref} className="account-nav-item">
             <span>{accountLabel}</span>
+            <ShortcutHint keys={[modifier, "A"]} />
           </Link>
         )}
       </nav>

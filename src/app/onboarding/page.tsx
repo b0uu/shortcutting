@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { PublicNavShortcuts } from "@/components/layout/PublicNavShortcuts";
 import type { AccountProfile } from "@/domain/cloud/accounts";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { importLocalHistoryOnce } from "@/storage/cloudImport";
@@ -341,6 +342,7 @@ export default function OnboardingPage() {
 
   return (
     <main className="public-page onboarding-page">
+      <PublicNavShortcuts profileHref="/onboarding" />
       <nav className="public-nav auth-nav">
         <Link href="/" className="logo">
           <span className="logo-mark">⌥</span>
