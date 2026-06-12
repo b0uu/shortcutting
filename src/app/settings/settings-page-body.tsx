@@ -93,6 +93,13 @@ function normalizeSettingsPageConfig(config: TestConfig): TestConfig {
       difficulty: "standard",
     };
   }
+  if (config.mode === "coding" && config.difficulty === "advanced") {
+    return {
+      ...config,
+      challengeCount: [3, 4].includes(config.challengeCount) ? config.challengeCount : 3,
+      difficulty: "standard",
+    };
+  }
   return {
     ...config,
     challengeCount: [3, 4].includes(config.challengeCount) ? config.challengeCount : 3,

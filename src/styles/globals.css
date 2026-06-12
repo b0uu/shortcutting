@@ -3737,6 +3737,19 @@ footer {
   display: flex;
   align-items: center;
   gap: 4px;
+  animation: leaderboardContentIn 0.18s ease both;
+}
+
+.difficulty-filter-group {
+  min-width: 144px;
+}
+
+.parts-filter-group {
+  min-width: 190px;
+}
+
+.mode-filter-group {
+  min-width: 230px;
 }
 
 .filter-btn {
@@ -3745,12 +3758,13 @@ footer {
   font-size: 0.8rem;
   padding: 4px 10px;
   text-decoration: none;
-  transition: color 0.15s, background 0.15s;
+  transition: color 0.18s ease, background 0.18s ease, transform 0.18s ease;
 }
 
 .filter-btn:hover {
   color: var(--text);
   background: var(--sub-alt);
+  transform: translateY(-1px);
 }
 
 .filter-btn.active {
@@ -3775,10 +3789,14 @@ footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
   border-radius: var(--r);
-  background: var(--sub-alt);
-  padding: 14px 18px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent 34%),
+    color-mix(in srgb, var(--panel) 86%, var(--sub-alt));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 6%, transparent);
+  padding: 18px 22px;
+  animation: leaderboardContentIn 0.2s ease both;
 }
 
 .my-rank-left,
@@ -3802,6 +3820,19 @@ footer {
   line-height: 1;
 }
 
+.my-rank-label {
+  color: color-mix(in srgb, var(--sub) 78%, var(--text));
+}
+
+.my-rank-sub {
+  color: color-mix(in srgb, var(--sub) 88%, var(--text));
+}
+
+.leaderboard-results {
+  min-height: 260px;
+  animation: leaderboardContentIn 0.2s ease both;
+}
+
 .rank {
   display: inline-block;
   min-width: 28px;
@@ -3821,6 +3852,18 @@ footer {
 
 .rank.bronze {
   color: #a07050;
+}
+
+@keyframes leaderboardContentIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .lb-user {

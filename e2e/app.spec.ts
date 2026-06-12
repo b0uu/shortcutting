@@ -281,26 +281,23 @@ test("completes a Python Coding Mode run", async ({ page }) => {
   await expect(page.getByText(/Python Coding/i)).toBeVisible();
 });
 
-test("completes Coding Mode runs across advanced and multiline generators", async ({ page }) => {
-  for (const difficulty of ["advanced", "multi-line"]) {
-    await page.goto(`/?seed=coding-${difficulty}`);
-    await page.evaluate(() => localStorage.clear());
-    await page.reload();
+test("keeps Coding Mode focused on standard and multiline options", async ({ page }) => {
+  await page.goto("/?seed=coding-multiline");
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
 
-    await page.getByRole("button", { name: "coding" }).click();
-    await page.getByRole("button", { name: /show run options/i }).click();
-    await page.getByRole("button", { name: difficulty }).click();
-    await expect(page.getByText(/python target/i)).toBeVisible();
-    if (difficulty === "multi-line") {
-      await expect(page.locator(".target-block")).toContainText(/\n/);
-      await expect.poll(async () => page.locator(".target-indent-guide").count()).toBeGreaterThan(0);
-    }
+  await page.getByRole("button", { name: "coding" }).click();
+  await page.getByRole("button", { name: /show run options/i }).click();
+  await expect(page.getByRole("button", { name: "advanced" })).toHaveCount(0);
+  await page.getByRole("button", { name: "multi-line" }).click();
+  await expect(page.getByText(/python target/i)).toBeVisible();
+  await expect(page.locator(".target-block")).toContainText(/\n/);
+  await expect.poll(async () => page.locator(".target-indent-guide").count()).toBeGreaterThan(0);
 
-    for (let index = 0; index < 3; index += 1) {
-      await completeVisiblePart(page, index, 3);
-    }
-    await expect(page.getByText(/Python Coding/i)).toBeVisible();
+  for (let index = 0; index < 3; index += 1) {
+    await completeVisiblePart(page, index, 3);
   }
+  await expect(page.getByText(/Python Coding/i)).toBeVisible();
 });
 
 test("completes a multiline Coding part through real keyboard input", async ({ page }) => {

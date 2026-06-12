@@ -9,8 +9,8 @@ type ModeBarProps = {
   onConfigChange: (patch: Partial<TestConfig>) => void;
 };
 
-const defaultDifficultyOptions: Difficulty[] = ["standard", "advanced", "multiline"];
 const targetDifficultyOptions: Difficulty[] = ["standard", "multiline"];
+const codingDifficultyOptions: Difficulty[] = ["standard", "multiline"];
 const defaultPartOptions: ChallengeCount[] = [3, 4];
 const drillPartOptions: ChallengeCount[] = [5, 10, 15];
 
@@ -18,7 +18,7 @@ export function ModeBar({ config, hidden, onModeChange, onConfigChange }: ModeBa
   const [optionsOpen, setOptionsOpen] = useState(false);
   const modifier = config.platform === "mac" ? "⌥" : "alt";
   const difficultyLocked = config.mode === "drill";
-  const difficultyOptions = config.mode === "target-match" ? targetDifficultyOptions : defaultDifficultyOptions;
+  const difficultyOptions = config.mode === "coding" ? codingDifficultyOptions : targetDifficultyOptions;
   const partOptions = difficultyLocked ? drillPartOptions : defaultPartOptions;
 
   return (

@@ -14,8 +14,8 @@ type SettingsPanelProps = {
 
 const defaultPartOptions: ChallengeCount[] = [3, 4];
 const drillPartOptions: ChallengeCount[] = [5, 10, 15];
-const defaultDifficultyOptions: Difficulty[] = ["standard", "advanced", "multiline"];
 const targetDifficultyOptions: Difficulty[] = ["standard", "multiline"];
+const codingDifficultyOptions: Difficulty[] = ["standard", "multiline"];
 
 type SettingsControlsProps = {
   config: TestConfig;
@@ -118,7 +118,7 @@ export function SettingsPanel({ open, config, onClose, onChange, onShortcutMap, 
 
 export function SettingsControls({ config, onChange, onShortcutMap, onResetLocalData }: SettingsControlsProps) {
   const partOptions = config.mode === "drill" ? drillPartOptions : defaultPartOptions;
-  const difficultyOptions = config.mode === "target-match" ? targetDifficultyOptions : defaultDifficultyOptions;
+  const difficultyOptions = config.mode === "coding" ? codingDifficultyOptions : targetDifficultyOptions;
 
   return (
     <>

@@ -745,11 +745,12 @@ export function GameApp() {
   }
 
   function crossfadeToConfig(nextConfig: TestConfig, durationMs = QUICK_CROSSFADE_MS) {
+    const normalizedConfig = normalizeChallengeCountForMode(nextConfig);
     setScreenFading(true);
     if (screenFadeTimeout.current) window.clearTimeout(screenFadeTimeout.current);
-    setConfig(nextConfig);
-    saveSettings(nextConfig);
-    resetPreview(nextConfig);
+    setConfig(normalizedConfig);
+    saveSettings(normalizedConfig);
+    resetPreview(normalizedConfig);
     screenFadeTimeout.current = window.setTimeout(() => {
       setScreenFading(false);
       screenFadeTimeout.current = null;
@@ -1186,6 +1187,13 @@ function normalizeChallengeCountForMode(config: TestConfig): TestConfig {
       ...config,
       challengeCount: defaultPartCounts.includes(config.challengeCount) ? config.challengeCount : 3,
       difficulty: "multiline",
+    };
+  }
+  if (config.mode === "coding" && config.difficulty === "advanced") {
+    return {
+      ...config,
+      challengeCount: defaultPartCounts.includes(config.challengeCount) ? config.challengeCount : 3,
+      difficulty: "standard",
     };
   }
   return defaultPartCounts.includes(config.challengeCount) ? config : { ...config, challengeCount: 3 };

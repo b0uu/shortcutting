@@ -7,7 +7,7 @@ import { getLeaderboardEntries } from "@/lib/supabase/cloudData";
 import { createSupabasePublicClient } from "@/lib/supabase/server";
 
 const modes: Mode[] = ["target-match", "drill", "coding"];
-const difficulties: Difficulty[] = ["standard", "advanced", "multiline"];
+const difficulties: Difficulty[] = ["standard", "multiline"];
 const standardPartCounts: ChallengeCount[] = [3, 4];
 const drillPartCounts: ChallengeCount[] = [5, 10, 15];
 
@@ -50,7 +50,7 @@ async function LeaderboardContent({ searchParams }: LeaderboardPageProps) {
         </div>
 
         <div className="filter-row" aria-label="leaderboard filters">
-          <div className="filter-group">
+          <div className="filter-group difficulty-filter-group">
             {difficulties.map((item) => (
               <Link
                 key={item}
@@ -63,7 +63,7 @@ async function LeaderboardContent({ searchParams }: LeaderboardPageProps) {
             ))}
           </div>
           <div className="filter-sep" />
-          <div className="filter-group">
+          <div className="filter-group parts-filter-group" key={`${mode}-parts`}>
             {partCounts.map((item) => (
               <Link
                 key={item}
@@ -76,12 +76,16 @@ async function LeaderboardContent({ searchParams }: LeaderboardPageProps) {
             ))}
           </div>
           <div className="filter-sep" />
-          <div className="filter-group">
+          <div className="filter-group mode-filter-group">
             {modes.map((item) => (
               <Link
                 key={item}
                 className={`filter-btn ${mode === item ? "active" : ""}`}
-                href={leaderboardHref({ mode: item, difficulty, challengeCount })}
+                href={leaderboardHref({
+                  mode: item,
+                  difficulty,
+                  challengeCount: partCountForMode(item, challengeCount),
+                })}
                 prefetch={false}
               >
                 {labelMode(item)}
@@ -91,7 +95,7 @@ async function LeaderboardContent({ searchParams }: LeaderboardPageProps) {
           <div className="filter-right">updated just now</div>
         </div>
 
-        <div className="my-rank-bar" aria-label="leaderboard summary">
+        <div className="my-rank-bar" key={`${mode}-${difficulty}-${challengeCount}`} aria-label="leaderboard summary">
           <div className="my-rank-left">
             <div className="my-rank-label">current leader</div>
             <div className="my-rank-val">{leader ? "#1" : "none"}</div>
@@ -104,7 +108,7 @@ async function LeaderboardContent({ searchParams }: LeaderboardPageProps) {
           </div>
         </div>
 
-        <section aria-label="leaderboard results">
+        <section className="leaderboard-results" key={`${mode}-${difficulty}-${challengeCount}-results`} aria-label="leaderboard results">
           <table className="lb-table">
             <thead>
               <tr>
@@ -157,7 +161,6 @@ function LeaderboardSkeleton() {
       <div className="filter-row" aria-hidden="true">
         <div className="filter-group">
           <span className="filter-btn active">standard</span>
-          <span className="filter-btn">advanced</span>
           <span className="filter-btn">multi-line</span>
         </div>
         <div className="filter-sep" />
@@ -233,6 +236,11 @@ function leaderboardHref(filter: { mode: Mode; difficulty: Difficulty; challenge
     parts: String(filter.challengeCount),
   });
   return `/leaderboards?${params.toString()}`;
+}
+
+function partCountForMode(mode: Mode, current: ChallengeCount): ChallengeCount {
+  const options = mode === "drill" ? drillPartCounts : standardPartCounts;
+  return options.includes(current) ? current : options[0];
 }
 
 function rankTone(rank: number): string {
