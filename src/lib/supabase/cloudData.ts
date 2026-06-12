@@ -131,6 +131,13 @@ export async function updateProfile(client: SupabaseClient, userId: string, patc
 
   if (patch.leaderboardOptOut) {
     await client.from("leaderboard_entries").delete().eq("user_id", userId);
+  } else if (update.handle !== undefined || update.display_name !== undefined || update.avatar_url !== undefined) {
+    await client.from("leaderboard_entries").update({
+      handle: data.handle,
+      display_name: data.display_name,
+      avatar_url: data.avatar_url,
+      updated_at: new Date().toISOString(),
+    }).eq("user_id", userId);
   }
 
   return rowToProfile(data);
@@ -383,6 +390,7 @@ async function updateProgress(client: SupabaseClient, userId: string, result: Te
     best_completed_at: bestResult.completedAt,
     best_result_id: bestResult.id,
     best_result_json: bestResult,
+    best_edits_per_minute: bestResult.editsPerMinute,
     updated_at: new Date().toISOString(),
   };
   const { error } = await client
@@ -415,6 +423,9 @@ async function updateLeaderboard(client: SupabaseClient, userId: string, profile
     elapsed_ms: Math.round(result.elapsedMs),
     edits_per_minute: result.editsPerMinute,
     completed_at: result.completedAt,
+    handle: profile.handle,
+    display_name: profile.displayName,
+    avatar_url: profile.avatarUrl,
     result_json: result,
     updated_at: new Date().toISOString(),
   }, { onConflict: "user_id,mode,difficulty,challenge_count" });
