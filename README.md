@@ -9,6 +9,7 @@
 - target mode, where you are given a block of text and tasked to match the text to a target sample
 - drill mode, where you are prompted to navigate text in a specific manner
 - coding mode, which is target mode but with coding syntax and IDE typing behavior
+- vim mode (coming soon, i'm learning rn)
 
 ## Screenshot
 <img width="1506" height="767" alt="image" src="https://github.com/user-attachments/assets/290350f1-0579-4dd8-8bc7-f2f81be8cc23" />
