@@ -11,8 +11,14 @@
 - coding mode, which is target mode but with coding syntax and IDE typing behavior
 - vim mode (coming soon, i'm learning rn)
 
+## Demo
+https://github.com/user-attachments/assets/a3ed8bb8-1d78-40d8-b815-732d58983fd9
+
 ## Screenshot
 <img width="1506" height="767" alt="image" src="https://github.com/user-attachments/assets/290350f1-0579-4dd8-8bc7-f2f81be8cc23" />
+
+
+
 
 ## How it works
 
