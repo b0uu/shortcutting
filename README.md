@@ -3,7 +3,7 @@
 # <img width="166" height="61" alt="image" src="https://github.com/user-attachments/assets/58975943-48de-42f6-a044-d9576f2485be" /> 
 ---
 ## About
-[shortcutting.xyz](http://shortcutting.xyz) is a fun and gamified test for in-line editing skills. It features 3 engaging modes, a detailed results page, a global leaderboard, and public user profiles.
+[shortcutting.xyz](http://shortcutting.xyz) is a fun typing & editing game built for in-line editing pratice. It features 3 engaging modes, a detailed results page, a global leaderboard, and public user profiles.
 
 ## Gamemodes
 - target mode, where you are given a block of text and tasked to match the text to a target sample
@@ -16,8 +16,6 @@ https://github.com/user-attachments/assets/a3ed8bb8-1d78-40d8-b815-732d58983fd9
 
 ## Screenshot
 <img width="1506" height="767" alt="image" src="https://github.com/user-attachments/assets/290350f1-0579-4dd8-8bc7-f2f81be8cc23" />
-
-
 
 
 ## How it works
@@ -41,6 +39,8 @@ if you like the game please feel free to fork this repository and make a pull re
 ## Inspiration
 
 this project was inspired by monkeytype, I love using their site for typing practice, so naturally, once I decided I wnated to improve my keyboard maneuvering skills, I decided to build this.
+
+get on the leaderboard now!
 
 
 ## License
