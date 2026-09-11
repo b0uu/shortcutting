@@ -244,7 +244,10 @@ export function GameApp() {
       await autoImportLocalHistory(data.user.id);
     }
 
-    void loadAccount();
+    loadAccount().catch(() => {
+      // A failed client chunk or network error should settle the account chrome, not leave it loading.
+      if (!cancelled) setAccountLoaded(true);
+    });
 
     return () => {
       cancelled = true;

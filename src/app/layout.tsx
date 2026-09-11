@@ -9,8 +9,7 @@ const fallbackSiteUrl = "https://shortcutting.xyz";
 // server-rendered on demand instead of served as prerendered HTML from the CDN.
 function resolveSiteUrl() {
   return process.env.NEXT_PUBLIC_SITE_URL
-    ?? process.env.DEPLOY_PRIME_URL
-    ?? process.env.URL
+    ?? (process.env.NETLIFY ? process.env.URL : undefined)
     ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : undefined)
     ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined)
     ?? (process.env.NODE_ENV === "development" ? "http://localhost:3000" : fallbackSiteUrl);
