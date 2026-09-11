@@ -1,7 +1,6 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import html2canvas from "html2canvas";
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
@@ -75,6 +74,9 @@ export function ResultsScreen({ result, themeColors, onPlayAgain, onPracticeAgai
 
   const renderShareCanvas = useCallback(async () => {
     if (!shareRef.current) return;
+    // Loaded on demand: html2canvas is only needed when the player exports a share
+    // card, so keeping it out of the initial chunk speeds up first load.
+    const { default: html2canvas } = await import("html2canvas");
     return html2canvas(shareRef.current, {
       backgroundColor: themeColors.background,
       scale: 2,

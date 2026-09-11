@@ -1,28 +1,23 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
 import { RouteTransition } from "@/components/layout/RouteTransition";
 import "@/styles/globals.css";
 
-function configuredSiteUrl() {
+const fallbackSiteUrl = "https://shortcutting.xyz";
+
+// Resolved from build-time config only. Reading request headers here would opt every
+// route under this layout into dynamic rendering, so the whole site would be
+// server-rendered on demand instead of served as prerendered HTML from the CDN.
+function resolveSiteUrl() {
   return process.env.NEXT_PUBLIC_SITE_URL
+    ?? process.env.DEPLOY_PRIME_URL
+    ?? process.env.URL
     ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : undefined)
-    ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined);
+    ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined)
+    ?? (process.env.NODE_ENV === "development" ? "http://localhost:3000" : fallbackSiteUrl);
 }
 
-async function resolveSiteUrl() {
-  const configured = configuredSiteUrl();
-  if (configured) return configured;
-
-  const requestHeaders = await headers();
-  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
-  if (!host) return "http://localhost:3000";
-
-  const protocol = requestHeaders.get("x-forwarded-proto") ?? (host.startsWith("localhost") || host.startsWith("127.") ? "http" : "https");
-  return `${protocol}://${host}`;
-}
-
-export async function generateMetadata(): Promise<Metadata> {
-  const siteUrl = await resolveSiteUrl();
+export function generateMetadata(): Metadata {
+  const siteUrl = resolveSiteUrl();
 
   return {
   metadataBase: new URL(siteUrl),

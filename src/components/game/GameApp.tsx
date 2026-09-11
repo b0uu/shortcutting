@@ -37,7 +37,7 @@ import { CloudResultLogger } from "@/storage/cloudResultLogger";
 import { HybridResultLogger } from "@/storage/hybridResultLogger";
 import { importLocalHistoryOnce } from "@/storage/cloudImport";
 import { loadSettings, saveSettings } from "@/storage/settingsStore";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { Header } from "@/components/layout/Header";
 import { HistoryPanel } from "@/components/history/HistoryPanel";
 import { ShortcutMapPanel } from "@/components/shortcuts/ShortcutMapPanel";
@@ -79,7 +79,7 @@ const ROUTE_PANEL_OPEN_DELAY_MS = 0;
 
 export function GameApp() {
   const localLogger = useMemo(() => new LocalResultLogger(), []);
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const supabaseConfigured = useMemo(() => isSupabaseConfigured(), []);
   const [accountUser, setAccountUser] = useState<AccountUser | null>(null);
   const [accountProfile, setAccountProfile] = useState<AccountProfile | null>(null);
   const [accountLoaded, setAccountLoaded] = useState(false);
@@ -192,16 +192,45 @@ export function GameApp() {
   }, []);
 
   useEffect(() => {
-    if (!supabase) {
+    if (!supabaseConfigured) {
       // Account chrome can stop reserving a loading label immediately when auth is not configured.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setAccountLoaded(true);
       return;
     }
-    const supabaseClient = supabase;
     let cancelled = false;
+    let unsubscribe: (() => void) | null = null;
 
     async function loadAccount() {
+      // The Supabase client is imported on demand so its bundle stays out of the
+      // initial page chunk; nothing above the fold depends on the signed-in user.
+      const { createSupabaseBrowserClient } = await import("@/lib/supabase/browser");
+      const supabaseClient = createSupabaseBrowserClient();
+      if (cancelled) return;
+      if (!supabaseClient) {
+        setAccountLoaded(true);
+        return;
+      }
+
+      const { data: authListener } = supabaseClient.auth.onAuthStateChange((_event, session) => {
+        if (!session?.user) {
+          setAccountUser(null);
+          setAccountProfile(null);
+          setAccountLoaded(true);
+          return;
+        }
+        void loadCloudAccount(session.user.id, session.user.email ?? null)
+          .then(() => {
+            setAccountLoaded(true);
+            return autoImportLocalHistory(session.user.id);
+          });
+      });
+      unsubscribe = () => authListener.subscription.unsubscribe();
+      if (cancelled) {
+        unsubscribe();
+        return;
+      }
+
       const { data } = await supabaseClient.auth.getUser();
       if (cancelled) return;
       if (!data.user) {
@@ -216,26 +245,13 @@ export function GameApp() {
     }
 
     void loadAccount();
-    const { data: authListener } = supabaseClient.auth.onAuthStateChange((_event, session) => {
-      if (!session?.user) {
-        setAccountUser(null);
-        setAccountProfile(null);
-        setAccountLoaded(true);
-        return;
-      }
-      void loadCloudAccount(session.user.id, session.user.email ?? null)
-        .then(() => {
-          setAccountLoaded(true);
-          return autoImportLocalHistory(session.user.id);
-        });
-    });
 
     return () => {
       cancelled = true;
-      authListener.subscription.unsubscribe();
+      unsubscribe?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localLogger, supabase]);
+  }, [localLogger, supabaseConfigured]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = config.theme;
